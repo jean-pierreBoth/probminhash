@@ -1,0 +1,113 @@
+# Some Minhash related algorithms
+
+This crate provides implementation of some recent algorithms around Minhash.  
+
+It implements:
+
+* ProbMinHash2, ProbMinHash3 and ProbMinHash3a as described in O. Ertl paper:
+**ProbMinHash. A Class of of Locality-Sensitive Hash Algorithms for the Probability Jaccard Similarity (2020)**
+[probminhash Ertl](https://arxiv.org/abs/1911.00675).
+
+These algorithms estimation of the Jaccard Weighted Index via sensitive hashing.
+It is an extension of the jaccard index to the case where objects have a weight, or a multiplicity associated.
+This Jaccard  Weighted Index provides a metric on discrete probability distributions as explained
+in :
+**Moulton Jiang. Maximally consistent sampling and the Jaccard index of probability distributions (2018)**
+[Moulton-Jiang-ieee](https://ieeexplore.ieee.org/document/8637426) or [Moulton-Jiang-arxiv](https://arxiv.org/abs/1809.04052)
+
+It must be noted that this modified Jaccard index (noted $Jp$) provides a metric on discrete probabilites by $1.-Jp$.  
+It is the core of the crate which relies on 3 modules.
+
+* Superminhash
+
+An implementation of Superminhash :  
+**A new minwise Hashing Algorithm for Jaccard Similarity Estimation**
+Otmar Ertl 2017-2018 Cf [superminhash Ertl](https://arxiv.org/abs/1706.05698)
+
+This algorithm runs on unweighted objects.
+The hash values are computed by the sketch method or can be computed before entering SuperMinHash methods.
+In this case (pre-hashed values) so the structure just computes permutation according to the paper.
+
+It runs in one pass on data so it can be used in streaming.
+
+An example of usage (see test_range_intersection_fnv) consisting to estimate intersection of contents of 2 vectors:
+
+```rust
+      let va : Vec<usize> = (0..1000).collect();
+      let vb : Vec<usize> = (900..2000).collect();
+      let bh = BuildHasherDefault::<FnvHasher>::default();
+      let mut sminhash : SuperMinHash<usize, FnvHasher>= SuperMinHash::new(70, &bh);
+      // now compute sketches
+      let resa = sminhash.sketch_slice(&va);
+      // we decide to reuse sminhash instead of allocating another SuperMinHash structure
+      let ska = sminhash.get_hsketch().clone();
+      sminhash.reinit();
+      let resb = sminhash.sketch_slice(&vb);
+      let skb = sminhash.get_hsketch();
+      //
+      let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        ...
+```
+
+* Probminhash
+  
+  An example of Prominhash3a with an IndexMap
+
+```rust
+    let mut wa : FnvIndexMap::<usize,f64>FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
+    let mut wb : FnvIndexMap::<usize,f64> = FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
+    ...
+    // initialization of IndexMap wa and wb
+    let mut waprobhash = ProbMinHash3a::new(nbhash, 0);
+    waprobhash.hash_weigthed_idxmap(&wa);
+    //
+    let mut wbprobhash = ProbMinHash3a::new(nbhash, 0);
+    wbprobhash.hash_weigthed_idxmap(&wb);
+    //
+    let siga = waprobhash.get_signature();
+    let sigb = wbprobhash.get_signature();
+    let jp_approx = compute_probminhash_jaccard(siga, sigb);
+
+```
+
+An example of Probminhash3 with items sent one by one:
+
+```rust
+    let set_size = 100;
+    let mut wa = Vec::<f64>::with_capacity(set_size);
+    let mut wb = Vec::<f64>::with_capacity(set_size);
+    // initialize wa, wb 
+    ....
+    // probminhash 
+    let mut waprobhash = ProbMinHash3::new(nbhash, 0);
+    for i in 0..set_size {
+        if wa[i] > 0. {
+            waprobhash.hash_item(i, wa[i]);
+        }
+    }
+    //
+    let mut wbprobhash = ProbMinHash3::new(nbhash, 0);
+    for i in 0..set_size {
+        if wb[i] > 0. {
+            wbprobhash.hash_item(i, wb[i]);
+        }
+    }
+    let siga = waprobhash.get_signature();
+    let sigb = wbprobhash.get_signature();
+    let jp_approx = compute_probminhash_jaccard(siga, sigb);
+```
+
+* Invhash
+  
+It is just a module providing invertible hash from u32 to u32 or u64 to u64 and can be used to run a prehash on indexes.
+
+## License
+
+Licensed under either of
+
+* Apache License, Version 2.0, [LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>
+* MIT license [LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>
+
+at your option.
+
+This software was written on my own while working at [CEA](http://www.cea.fr/)
