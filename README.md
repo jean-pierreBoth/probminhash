@@ -11,12 +11,11 @@ It implements:
 These algorithms compute an estimation of the Jaccard weighted index via sensitive hashing.
 It is an extension of the Jaccard index to the case where objects have a weight, or a multiplicity associated.
 This Jaccard  weighted index provides a metric on discrete probability distributions as explained in :
-
 **Moulton Jiang. Maximally consistent sampling and the Jaccard index of probability distributions (2018)**
 [Moulton-Jiang-ieee](https://ieeexplore.ieee.org/document/8637426) or [Moulton-Jiang-arxiv](https://arxiv.org/abs/1809.04052)
 
-This modified Jaccard index (noted **Jp**) provides a metric on discrete probabilites by :  **1. - Jp**.  
-It is the core of the crate which relies on 3 modules.
+Noting *Jp* the Jaccard weighted index then  *1. - Jp* defines a metric on finite discrete probabilities.  
+This module is the core of the crate which relies on 3 modules.
 
 * Superminhash
 
@@ -25,8 +24,8 @@ An implementation of Superminhash :
 Otmar Ertl 2017-2018 Cf [superminhash Ertl](https://arxiv.org/abs/1706.05698)
 
 This algorithm runs on unweighted objects.
-The hash values are computed by the sketch method or can be computed before entering SuperMinHash methods.
-In this case (pre-hashed values) so the structure just computes permutation according to the paper.
+The hash values are computed by the *sketch* method or can be computed before entering SuperMinHash methods.
+In this case (pre-hashed values) the structure just computes permutation according to the paper.
 
 It runs in one pass on data so it can be used in streaming.
 
@@ -37,7 +36,7 @@ It is just a module providing invertible hash from u32 to u32 or u64 to u64 and 
 
 ## Some examples
 
-Some examples of usage (see the tests in each module) consisting to estimate intersection of contents of 2 vectors:
+Some example of usage (more in the tests in each module) consisting to estimate intersection of contents of 2 vectors:
 
 * Probminhash
   
