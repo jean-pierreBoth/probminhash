@@ -15,7 +15,7 @@ This Jaccard  weighted index provides a metric on discrete probability distribut
 [Moulton-Jiang-ieee](https://ieeexplore.ieee.org/document/8637426) or [Moulton-Jiang-arxiv](https://arxiv.org/abs/1809.04052)
 
 Noting *Jp* the Jaccard weighted index then  *1. - Jp* defines a metric on finite discrete probabilities.  
-This module is the core of the crate which relies on 3 modules.
+This module is the core of the crate which has two other modules.
 
 * Superminhash
 
