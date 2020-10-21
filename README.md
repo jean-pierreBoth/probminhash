@@ -1,6 +1,6 @@
 # Some Minhash related algorithms
 
-This crate provides implementation of some recent algorithms around Minhash.  
+This crate provides implementation of some recent algorithms deriving from the original Minhash. They have better performance and more general.  
 
 It implements:
 
@@ -8,14 +8,14 @@ It implements:
 **ProbMinHash. A Class of of Locality-Sensitive Hash Algorithms for the Probability Jaccard Similarity (2020)**
 [probminhash Ertl](https://arxiv.org/abs/1911.00675).
 
-These algorithms estimation of the Jaccard Weighted Index via sensitive hashing.
-It is an extension of the jaccard index to the case where objects have a weight, or a multiplicity associated.
-This Jaccard  Weighted Index provides a metric on discrete probability distributions as explained
-in :
+These algorithms compute an estimation of the Jaccard weighted index via sensitive hashing.
+It is an extension of the Jaccard index to the case where objects have a weight, or a multiplicity associated.
+This Jaccard  weighted index provides a metric on discrete probability distributions as explained in :
+
 **Moulton Jiang. Maximally consistent sampling and the Jaccard index of probability distributions (2018)**
 [Moulton-Jiang-ieee](https://ieeexplore.ieee.org/document/8637426) or [Moulton-Jiang-arxiv](https://arxiv.org/abs/1809.04052)
 
-It must be noted that this modified Jaccard index (noted $Jp$) provides a metric on discrete probabilites by $1.-Jp$.  
+This modified Jaccard index (noted **Jp**) provides a metric on discrete probabilites by :  **1. - Jp**.  
 It is the core of the crate which relies on 3 modules.
 
 * Superminhash
@@ -30,24 +30,14 @@ In this case (pre-hashed values) so the structure just computes permutation acco
 
 It runs in one pass on data so it can be used in streaming.
 
-An example of usage (see test_range_intersection_fnv) consisting to estimate intersection of contents of 2 vectors:
+* Invhash
+  
+It is just a module providing invertible hash from u32 to u32 or u64 to u64 and can be used to run a prehash on indexes.
+(See reference to Thomas Wang's invertible integer hash functions in invhash.rs)
 
-```rust
-      let va : Vec<usize> = (0..1000).collect();
-      let vb : Vec<usize> = (900..2000).collect();
-      let bh = BuildHasherDefault::<FnvHasher>::default();
-      let mut sminhash : SuperMinHash<usize, FnvHasher>= SuperMinHash::new(70, &bh);
-      // now compute sketches
-      let resa = sminhash.sketch_slice(&va);
-      // we decide to reuse sminhash instead of allocating another SuperMinHash structure
-      let ska = sminhash.get_hsketch().clone();
-      sminhash.reinit();
-      let resb = sminhash.sketch_slice(&vb);
-      let skb = sminhash.get_hsketch();
-      //
-      let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
-        ...
-```
+## Some examples
+
+Some examples of usage (see the tests in each module) consisting to estimate intersection of contents of 2 vectors:
 
 * Probminhash
   
@@ -76,9 +66,9 @@ An example of Probminhash3 with items sent one by one:
     let set_size = 100;
     let mut wa = Vec::<f64>::with_capacity(set_size);
     let mut wb = Vec::<f64>::with_capacity(set_size);
-    // initialize wa, wb 
+    // initialize wa, wb
     ....
-    // probminhash 
+    // probminhash
     let mut waprobhash = ProbMinHash3::new(nbhash, 0);
     for i in 0..set_size {
         if wa[i] > 0. {
@@ -97,9 +87,24 @@ An example of Probminhash3 with items sent one by one:
     let jp_approx = compute_probminhash_jaccard(siga, sigb);
 ```
 
-* Invhash
-  
-It is just a module providing invertible hash from u32 to u32 or u64 to u64 and can be used to run a prehash on indexes.
+* Superminhash
+
+```rust
+      let va : Vec<usize> = (0..1000).collect();
+      let vb : Vec<usize> = (900..2000).collect();
+      let bh = BuildHasherDefault::<FnvHasher>::default();
+      let mut sminhash : SuperMinHash<usize, FnvHasher>= SuperMinHash::new(70, &bh);
+      // now compute sketches
+      let resa = sminhash.sketch_slice(&va);
+      // we decide to reuse sminhash instead of allocating another SuperMinHash structure
+      let ska = sminhash.get_hsketch().clone();
+      sminhash.reinit();
+      let resb = sminhash.sketch_slice(&vb);
+      let skb = sminhash.get_hsketch();
+      //
+      let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        ...
+```
 
 ## License
 
