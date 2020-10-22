@@ -40,23 +40,25 @@ Some example of usage (more in the tests in each module) consisting to estimate 
 
 * Probminhash
   
-  An example of Prominhash3a with an IndexMap
+  An example of Prominhash3a with an IndexMap (see test probminhash::tests::test_probminhash3a_count_intersection_unequal_weights)
 
 ```rust
-    let mut wa : FnvIndexMap::<usize,f64>FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
-    let mut wb : FnvIndexMap::<usize,f64> = FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
+    type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
     ...
-    // initialization of IndexMap wa and wb
-    let mut waprobhash = ProbMinHash3a::new(nbhash, 0);
+    let mut wa : FnvIndexMap::<usize,f64> = FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
+    // initialize wa ...
+
+    let mut wb : FnvIndexMap::<usize,f64> = FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
+    // initialize ...
+    let mut waprobhash = ProbMinHash3a::<usize, FnvHasher>::new(nbhash, 0);
     waprobhash.hash_weigthed_idxmap(&wa);
     //
-    let mut wbprobhash = ProbMinHash3a::new(nbhash, 0);
+    let mut wbprobhash = ProbMinHash3a::<usize, FnvHasher>::new(nbhash, 0);
     wbprobhash.hash_weigthed_idxmap(&wb);
     //
     let siga = waprobhash.get_signature();
     let sigb = wbprobhash.get_signature();
     let jp_approx = compute_probminhash_jaccard(siga, sigb);
-
 ```
 
 An example of Probminhash3 with items sent one by one:
@@ -68,14 +70,14 @@ An example of Probminhash3 with items sent one by one:
     // initialize wa, wb
     ....
     // probminhash
-    let mut waprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut waprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wa[i] > 0. {
             waprobhash.hash_item(i, wa[i]);
         }
     }
     //
-    let mut wbprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut wbprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wb[i] > 0. {
             wbprobhash.hash_item(i, wb[i]);
