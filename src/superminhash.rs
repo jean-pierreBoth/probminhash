@@ -275,7 +275,7 @@ mod tests {
 
 
     #[allow(dead_code)]
-    fn log_init() {
+    fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_range_intersection_fnv() {
-        log_init();
+        log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
@@ -325,6 +325,7 @@ mod tests {
     // the following tests when data are already hashed data and we use NoHashHasher inside minhash
     #[test]
     fn test_range_intersection_already_hashed() {
+        log_init_test();
         //  It seems that the log initialization in only one test is sufficient (and more cause a bug).
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)

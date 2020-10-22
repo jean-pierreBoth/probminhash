@@ -588,7 +588,7 @@ use fnv::FnvBuildHasher;
 type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
 
 #[allow(dead_code)]
-fn log_init() {
+fn log_init_test() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
@@ -604,7 +604,7 @@ use super::*;
     // But as it needs some time we set nb_sampled to 10_000_000. 
     // test is often negative, so mu_th is approximated by above ?. to check
     fn test_exp01() {
-        log_init();
+        log_init_test();
         //
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(234567 as u64);
         let mut xsi;
@@ -634,7 +634,7 @@ use super::*;
     #[test]    
     // This test stores random values in a MaxValueTracker and check for max at higher end of array
     fn test_max_value_tracker() {
-        log_init();
+        log_init_test();
         //
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(45678 as u64);
 
@@ -675,7 +675,7 @@ use super::*;
     // This test checks that with equal weights we fall back to Jaccard estimate
     fn test_probminhash3_count_intersection_equal_weights() {
         //
-        log_init();
+        log_init_test();
         //
         debug!("test_probminhash_count_intersection_equal_weights");
         println!("test_probminhash_count_intersection_equal_weights");
@@ -753,7 +753,7 @@ use super::*;
 // This test checks JaccardProbability with unequal weights inside sets
 fn test_probminhash3a_count_intersection_unequal_weights() {
     //
-    log_init();
+    log_init_test();
     //
     println!("test_probminhash3a_count_intersection_unequal_weights");
     debug!("test_probminhash3a_count_intersection_unequal_weights");
@@ -820,7 +820,7 @@ fn test_probminhash3a_count_intersection_unequal_weights() {
 // This test checks JaccardProbability with unequal weights inside sets
 fn test_probminhash3_count_intersection_unequal_weights() {
     //
-    log_init();
+    log_init_test();
     //
     println!("test_probminhash3_count_intersection_unequal_weights");
     debug!("test_probminhash3_count_intersection_unequal_weights");
@@ -898,7 +898,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
 // variance is 5/4
 fn test_fyshuffle() {
 
-    log_init();
+    log_init_test();
 
     let m = 4;
     let mut fypermut = FYshuffle::new(m);
@@ -929,7 +929,7 @@ fn test_fyshuffle() {
 // This test checks JaccardProbability with unequal weights inside sets
 fn test_probminhash2_count_intersection_unequal_weights() {
     //
-    log_init();
+    log_init_test();
     //
     println!("test_probminhash2_count_intersection_unequal_weights");
     debug!("test_probminhash2_count_intersection_unequal_weights");
