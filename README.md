@@ -40,7 +40,8 @@ Some example of usage (more in the tests in each module) consisting to estimate 
 
 * Probminhash
   
-  An example of Prominhash3a with an IndexMap (see test probminhash::tests::test_probminhash3a_count_intersection_unequal_weights)
+An example of Prominhash3a with an IndexMap  
+(see test probminhash::tests::test_probminhash3a_count_intersection_unequal_weights)
 
 ```rust
     type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
