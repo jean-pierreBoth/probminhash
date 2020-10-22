@@ -8,7 +8,7 @@
 //! <https://ieeexplore.ieee.org/document/8637426> or <https://arxiv.org/abs/1809.04052>.  
 //! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //! 
-//! The generic type D must satisfy D:Copy+Eq+Hash+Debug+Into<usize>.  
+//! The generic type D must satisfy D:Copy+Eq+Hash+Debug+Into\<usize\>.  
 //! The constraint Into<usize> is a kind of hack.
 //! D must be convertible injectively into a usize beccause the alogrithm requires 
 //! a random generator initialization (with a usize) for each object hashed.  
@@ -184,10 +184,11 @@ impl MaxValueTracker {
 
 
 /// A Trait to define association of a weight to an object.
-/// Typically we could implement Trait WeightedSet for an IndexMap<Object, f64> giving a weight to each object
+/// Typically we could implement trait WeightedSet for an IndexMap<Object, f64> giving a weight to each object
 /// or encapsulate a function associating a weight to an object
 pub trait WeightedSet {
     type Object;
+    /// returns the weight of an object
     fn get_weight(&self, obj:&Self::Object) -> f64;
 }
 
@@ -514,7 +515,7 @@ impl <D> ProbMinHash2<D>
     /// Incrementally adds an item in hash signature. It can be used in streaming.  
     /// It is the building block of the computation, but this method 
     /// does not check for unicity of id added in hash computation.  
-    /// It is user responsability to enforce that. See method hashWSet
+    /// It is user responsability to enforce that. See method hash_wset
     pub fn hash_item(&mut self, id:D, weight:f64) {
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
@@ -543,6 +544,16 @@ impl <D> ProbMinHash2<D>
             assert!(i < self.m);
         }
     }  // end of hash_item 
+
+
+    /// hash data when given by an iterable WeightedSet
+    pub fn hash_wset<T>(&mut self, data: &mut T)
+    where T: WeightedSet<Object=D> + Iterator<Item=D> {
+        while let Some(obj) = &data.next() {
+            let weight = data.get_weight(&obj);
+            self.hash_item(*obj, weight);
+        }
+    } // end of hash method
 
 
 }  // end of implementation block for ProbMinHash2
