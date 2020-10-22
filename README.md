@@ -1,6 +1,6 @@
 # Some Minhash related algorithms
 
-This crate provides implementation of some recent algorithms deriving from the original Minhash. They have better performance and more general.  
+This crate provides implementation of some recent algorithms deriving from the original Minhash. They have better performance and are more general.  
 
 It implements:
 
