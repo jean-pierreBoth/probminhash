@@ -107,11 +107,21 @@ extern crate rand;
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use rand::thread_rng;
     use rand::RngCore;
+    use log::*;
+
+
+    #[allow(dead_code)]
+    fn log_init_test() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
     #[test]
     fn test_inversible_hash_64() {
+        log_init_test();
         // random generation of values and mask and check inversion
         let mut to_hash;
         let mut hashed;
@@ -120,7 +130,7 @@ mod tests {
             to_hash = rand::thread_rng().next_u64();
             hashed = int64_hash(to_hash);
             i_hashed = int64_hash_inverse(hashed);
-            println!("i hash unhash = {} {}  {} ", i , to_hash, i_hashed);          
+            trace!("i hash unhash = {} {}  {} ", i , to_hash, i_hashed);          
             assert!(to_hash == i_hashed);
         }
     } // end of test_inversible_hash_64
@@ -128,6 +138,7 @@ mod tests {
 
    #[test]
     fn test_inversible_hash_32() {
+        log_init_test();
         // random generation of values and mask and check inversion
         let mut to_hash;
         let mut hashed;
@@ -136,7 +147,7 @@ mod tests {
             to_hash = thread_rng().next_u32();
             hashed = int32_hash(to_hash);
             i_hashed = int32_hash_inverse(hashed);
-            println!("i hash unhash = {} {}  {} ", i , to_hash, i_hashed);          
+            trace!("i hash unhash = {} {}  {} ", i , to_hash, i_hashed);          
             assert!(to_hash == i_hashed);
         }
     } // end of test_inversible_hash_32

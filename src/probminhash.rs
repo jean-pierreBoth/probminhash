@@ -9,14 +9,10 @@
 //! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //! 
 //! The generic type D must satisfy D:Copy+Eq+Hash+Debug+Into\<usize\>.  
-//! The constraint Into<usize> is a kind of hack.
-//! D must be convertible injectively into a usize beccause the alogrithm requires 
-//! a random generator initialization (with a usize) for each object hashed.  
-//! As objects are indexed in an IndexMap for example the probminhash function can work on the index
-//! instead of the object itself and the Into constraint becomes a no constraint 
-//! 
-//! 
-//! 
+//! The algorithms requires random generators to be initialized o we need to map (at least approximately)
+//! injectively objects into a u64 so the of objcts must satisfy H.
+//! If D is of type u64 it is possible to use a NoHasher
+
 use log::{trace};
 
 use std::fmt::{Debug};
@@ -27,8 +23,7 @@ use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use wyhash::*;
-use std::hash::Hash;
-
+use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use indexmap::{IndexMap};
 
 /// Structure for defining exponential sampling of parameter lambda with support restricted
@@ -193,6 +188,13 @@ pub trait WeightedSet {
 }
 
 
+/// The algorithms requires random generators to be initialized by objects hashed. 
+/// So we need to map (at least approximately) injectively objects hashed into a usize.
+/// We do not rely upon  a Into<usize> constraint as it would require a reverse From<D>.
+/// But we provide trivial to usize conversion for integers often used in indexing objects hashed.
+/// This is not aesthetic but preserves to possibility of using the structure with user's type
+/// for which a a conveninent mapping to usize exists.
+/// 
 
 
 /// implementation of the algorithm ProbMinHash3.  
@@ -200,9 +202,11 @@ pub trait WeightedSet {
 /// If all data are referred to by an index, for example if objects are stored in an IndexMap<D, f64, H>,
 /// D is the index.  
 /// see function hash_weigthed_idxmap
-pub struct ProbMinHash3<D> 
-            where D:Copy+Eq+Into<usize>+Hash+Debug   {
+pub struct ProbMinHash3<D, H: Hasher+Default> 
+            where D:Copy+Eq+Hash+Debug   {
     m : usize,
+    ///
+    b_hasher: H,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// a exponential law restricted to interval [0., 1)
@@ -212,8 +216,8 @@ pub struct ProbMinHash3<D>
 } // end of struct ProbMinHash3
 
 
-impl<D> ProbMinHash3<D> 
-            where D:Copy+Eq+Debug+Into<usize>+Hash {
+impl<D,H> ProbMinHash3<D, H> 
+            where D:Copy+Eq+Debug+Hash , H: Hasher+Default {
 
     /// allocates a new ProbMinHash3 structure with nbhash functions and initial object initobj to fill signature.  
     /// The precision on the final estimation depends on the number of hash functions.   
@@ -222,7 +226,8 @@ impl<D> ProbMinHash3<D>
         assert!(nbhash >= 2);
         let lambda = ((nbhash as f64)/((nbhash - 1) as f64)).ln();
         let h_signature = (0..nbhash).map( |_| initobj).collect();
-        ProbMinHash3{m:nbhash, maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
+        ProbMinHash3{m:nbhash, b_hasher : BuildHasherDefault::<H>::default().build_hasher(), 
+                    maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
                     exp01:ExpRestricted01::new(lambda), signature:h_signature}
     } // end of new
     
@@ -236,7 +241,9 @@ impl<D> ProbMinHash3<D>
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv = 1./weight;
         let unif0m = Uniform::<usize>::new(0, self.m);
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(id.into() as u64);
+        id.hash(&mut self.b_hasher);
+        let id_hash : u64 = self.b_hasher.finish();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         let mut h = winv * self.exp01.sample(&mut rng);
         let mut i = 1;
         let mut qmax = self.maxvaluetracker.get_max_value();
@@ -277,8 +284,8 @@ impl<D> ProbMinHash3<D>
     /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
     /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
     /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
-    pub fn hash_weigthed_idxmap<H>(&mut self, data: &mut IndexMap<D, f64, H>) 
-                where   H : std::hash::BuildHasher, 
+    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &mut IndexMap<D, f64, Hidx>) 
+                where   Hidx : std::hash::BuildHasher, 
     {
         let mut objects = data.keys();
         loop {
@@ -306,9 +313,12 @@ impl<D> ProbMinHash3<D>
 /// between 2 passes on data.
 /// D must be convertible injectively into a usize for random generator initialization hence the requirement Into<usize>
 /// If all data are directly referred to by an index D, is the index (usize)
-pub struct ProbMinHash3a<D> 
-            where D:Copy+Eq+Into<usize>+Hash+Debug   {
+pub struct ProbMinHash3a<D,H> 
+            where D:Copy+Eq+Hash+Debug,
+                  H:Hasher+Default  {
     m : usize,
+    ///
+    hasher : H,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// a exponential law restricted to interval [0., 1)
@@ -321,8 +331,8 @@ pub struct ProbMinHash3a<D>
 
 
 
-impl <D> ProbMinHash3a<D> 
-        where D:Copy+Eq+Debug+Into<usize>+Hash {
+impl <D,H> ProbMinHash3a<D,H> 
+        where D:Copy+Eq+Debug+Hash, H : Hasher+Default {
 
     /// Allocates a new ProbMinHash3a structure with nbhash functions and initial object initobj to fill signature.  
     /// The precision on the final estimation depends on the number of hash functions.   
@@ -333,6 +343,7 @@ impl <D> ProbMinHash3a<D>
         let h_signature = (0..nbhash).map( |_| initobj).collect();
         ProbMinHash3a{m:nbhash, 
                 maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
+                hasher : BuildHasherDefault::<H>::default().build_hasher(),
                 exp01:ExpRestricted01::new(lambda), 
                 to_be_processed : Vec::<(D, f64, Xoshiro256PlusPlus)>::new(),
                 signature:h_signature}
@@ -342,8 +353,8 @@ impl <D> ProbMinHash3a<D>
     /// It is the building block of the computation, but this method 
     /// does not check for unicity of id added in hash computation.  
     /// It is user responsability to enforce that. See method hashWSet
-    pub fn hash_weigthed_idxmap<H>(&mut self, data: &IndexMap<D, f64, H>) 
-                where   H : std::hash::BuildHasher  {
+    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
+                where   Hidx : std::hash::BuildHasher  {
         //
         let mut objects = data.keys();
         let unif0m = Uniform::<usize>::new(0, self.m);
@@ -354,8 +365,9 @@ impl <D> ProbMinHash3a<D>
                 if let Some(weight) = data.get(key) {
                     trace!("hash_item : id {:?}  weight {} ", key, weight);
                     let winv = 1./weight;
-                    let key_usize : usize = (*key).into();
-                    let mut rng = Xoshiro256PlusPlus::seed_from_u64(key_usize as u64);
+                    key.hash(&mut self.hasher);
+                    let new_hash : u64 = self.hasher.finish();
+                    let mut rng = Xoshiro256PlusPlus::seed_from_u64(new_hash);
                     let h = winv * self.exp01.sample(&mut rng);
                     qmax = self.maxvaluetracker.get_max_value();
                     
@@ -481,9 +493,11 @@ impl FYshuffle {
 /// implementation of the algorithm ProbMinHash2 as described in Ertl paper.  
 /// D must be convertible injectively into a usize for random generator initialization hence the requirement Into<usize>.
 /// If all data are directly referred to by an index, then  D is the index (usize)
-pub struct ProbMinHash2<D> 
-            where D:Copy+Eq+Into<usize>+Debug   {
+pub struct ProbMinHash2<D,H> 
+            where D:Copy+Eq+Hash+Debug,H:Hasher+Default    {
     m : usize,
+    ///
+    hasher : H,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// random permutation generator
@@ -497,14 +511,15 @@ pub struct ProbMinHash2<D>
 
 
 
-impl <D> ProbMinHash2<D>
-        where D:Copy+Eq+Debug+Into<usize> {
+impl <D,H> ProbMinHash2<D,H>
+        where D:Copy+Eq+Hash+Debug,H:Hasher+Default {
 
     /// Allocates a ProbMinHash2 structure with nbhash hash functions and initialize signature with initobj (typically 0 for numeric objects)
     pub fn new(nbhash:usize, initobj:D) -> Self {
         let h_signature = (0..nbhash).map( |_| initobj).collect();
         let betas : Vec<f64> = (0..nbhash).map(| x | (nbhash as f64)/ (nbhash - x) as f64).collect();
         ProbMinHash2{ m:nbhash, 
+                    hasher :  BuildHasherDefault::<H>::default().build_hasher(),
                     maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
                     permut_generator : FYshuffle::new(nbhash),
                     betas : betas,
@@ -520,7 +535,9 @@ impl <D> ProbMinHash2<D>
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv : f64 = 1./weight;
-        let mut rng = Xoshiro256PlusPlus::seed_from_u64(id.into() as u64);
+        id.hash(&mut self.hasher);
+        let id_hash : u64 = self.hasher.finish();
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         self.permut_generator.reset();
         let mut i = 0;
         let x : f64 = rng.sample(Exp1);
@@ -555,8 +572,13 @@ impl <D> ProbMinHash2<D>
         }
     } // end of hash method
 
-
+    /// return final signature.
+    pub fn get_signature(&self) -> &Vec<D> {
+        return &self.signature;
+    }
 }  // end of implementation block for ProbMinHash2
+
+
 
 /// computes the weighted jaccard index of 2 signatures.
 /// The 2 signatures must come from two equivalent instances of the same ProbMinHash algorithm
@@ -583,8 +605,8 @@ mod tests {
 use log::*;
 
 use indexmap::{IndexMap};
+use fnv::{FnvHasher,FnvBuildHasher};
 
-use fnv::FnvBuildHasher;
 type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;
 
 #[allow(dead_code)]
@@ -668,7 +690,7 @@ use super::*;
             assert!( !( sibling_value > pidx_value  &&   i_value >  pidx_value) );
         }
         assert!(!( vmax > tracker.get_max_value()  && vmax < tracker.get_max_value() ));
-        tracker.dump();
+//        tracker.dump();
     } // end of test_probminhash_count_range_intersection
 
     #[test] 
@@ -721,16 +743,16 @@ use super::*;
         trace!("Jp = {} ",jp);
         // probminhash 
         trace!("\n\n hashing wa");
-        let mut waprobhash = ProbMinHash3::new(nbhash, 0);
+        let mut waprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
         for i in 0..set_size {
             if wa[i] > 0. {
                 waprobhash.hash_item(i, wa[i]);
             }
         }
-        waprobhash.maxvaluetracker.dump();
+        // waprobhash.maxvaluetracker.dump();
         //
         trace!("\n\n hashing wb");
-        let mut wbprobhash = ProbMinHash3::new(nbhash,0 );
+        let mut wbprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash,0 );
         for i in 0..set_size {
             if wb[i] > 0. {
                 wbprobhash.hash_item(i, wb[i]);
@@ -741,8 +763,8 @@ use super::*;
         //
         let jp_approx = compute_probminhash_jaccard(siga, sigb);
         //
-        waprobhash.maxvaluetracker.dump();
-        wbprobhash.maxvaluetracker.dump();
+//       waprobhash.maxvaluetracker.dump();
+//       wbprobhash.maxvaluetracker.dump();
         //
         info!("exact jp = {} ,jp estimated = {} ", jp, jp_approx);
     } // end of test_prob_count_intersection
@@ -780,11 +802,11 @@ fn test_probminhash3a_count_intersection_unequal_weights() {
     } 
     // probminhash 
     trace!("\n\n hashing wa");
-    let mut waprobhash = ProbMinHash3a::new(nbhash, 0);
+    let mut waprobhash = ProbMinHash3a::<usize, FnvHasher>::new(nbhash, 0);
     waprobhash.hash_weigthed_idxmap(&wa);
     //
     trace!("\n\n hashing wb");
-    let mut wbprobhash = ProbMinHash3a::new(nbhash, 0);
+    let mut wbprobhash = ProbMinHash3a::<usize, FnvHasher>::new(nbhash, 0);
     wbprobhash.hash_weigthed_idxmap(&wb);
     //     
     let siga = waprobhash.get_signature();
@@ -853,7 +875,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     }
     // probminhash 
     trace!("\n\n hashing wa");
-    let mut waprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut waprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wa[i] > 0. {
             waprobhash.hash_item(i, wa[i]);
@@ -861,7 +883,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     }
     //
     trace!("\n\n hashing wb");
-    let mut wbprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut wbprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wb[i] > 0. {
             wbprobhash.hash_item(i, wb[i]);
@@ -974,16 +996,16 @@ fn test_probminhash2_count_intersection_unequal_weights() {
     trace!("Jp = {} ",jp);
     // probminhash 
     trace!("\n\n hashing wa");
-    let mut waprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut waprobhash = ProbMinHash2::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wa[i] > 0. {
             waprobhash.hash_item(i, wa[i]);
         }
     }
-    waprobhash.maxvaluetracker.dump();
+    // waprobhash.maxvaluetracker.dump();
     //
     trace!("\n\n hashing wb");
-    let mut wbprobhash = ProbMinHash3::new(nbhash, 0);
+    let mut wbprobhash = ProbMinHash2::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wb[i] > 0. {
             wbprobhash.hash_item(i, wb[i]);
@@ -998,8 +1020,8 @@ fn test_probminhash2_count_intersection_unequal_weights() {
         }
     }
     //
-    waprobhash.maxvaluetracker.dump();
-    wbprobhash.maxvaluetracker.dump();
+    // waprobhash.maxvaluetracker.dump();
+    // wbprobhash.maxvaluetracker.dump();
     //
     info!("jp = {} , inter / card = {} ", jp, inter as f64/siga.len() as f64);
 } // end of test_probminhash2_count_intersection_unequal_weights
