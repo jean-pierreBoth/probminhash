@@ -189,12 +189,13 @@ pub trait WeightedSet {
 
 
 /// implementation of the algorithm ProbMinHash3a as described in Etrl.  
-/// It needs less memory than Probminhash3 but can be a little slower. 
+/// It needs less memory than Probminhash3 but can be a little slower.   
+/// Probminhash3 needs at least 2 hash values to run.
 ///  
 /// The algorithms requires random generators to be initialized by objects hashed. 
-/// So D must be convertible (at least partially) injectively into a u64 for random generator initialization hence the requirement D:H.  
+/// So it must possible to associate D (at least partially) injectively to a u64 for random generator initialization hence the requirement D:H.  
 /// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example 
-/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, the no hash is need and you can use NoHasher
+/// data comes in a Vec<(D,f64)> then D is in fact can be replaced by the rank in the Vector, the no hash is need and you can use NoHasher
 pub struct ProbMinHash3<D, H: Hasher+Default> 
             where D:Copy+Eq+Hash+Debug   {
     m : usize,
@@ -212,7 +213,8 @@ pub struct ProbMinHash3<D, H: Hasher+Default>
 impl<D,H> ProbMinHash3<D, H> 
             where D:Copy+Eq+Debug+Hash , H: Hasher+Default {
 
-    /// allocates a new ProbMinHash3 structure with nbhash functions and initial object initobj to fill signature.  
+    /// Allocates a new ProbMinHash3 structure with nbhash functions and initial object initobj to fill signature.  
+    /// nbhash must be greater or equal to 2.
     /// The precision on the final estimation depends on the number of hash functions.   
     /// The initial object can be any object , typically 0 for numerical objects.
     pub fn new(nbhash:usize, initobj : D) -> Self {
@@ -304,10 +306,11 @@ impl<D,H> ProbMinHash3<D, H>
 /// implementation of the algorithm ProbMinHash3a as described in Etrl.  
 /// This version of ProbMinHash3 is faster but needs some more memory as it stores some states
 /// between 2 passes on data.
-///
-/// D must be convertible injectively into a usize for random generator initialization hence the requirement Hash.  
+/// 
+/// Probminhash3a needs at least 2 hash values to run.
+/// D must be convertible (at least partially) injectively into a usize for random generator initialization hence the requirement D:Hash.  
 /// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example if
-/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, then no hash is need and you can use NoHasher
+/// data comes in a Vec<(D,f64)> then D can be in fact replaced by the rank in the Vector, then no hash is need and you can use NoHasher
 pub struct ProbMinHash3a<D,H> 
             where D:Copy+Eq+Hash+Debug,
                   H:Hasher+Default  {
@@ -329,7 +332,7 @@ pub struct ProbMinHash3a<D,H>
 impl <D,H> ProbMinHash3a<D,H> 
         where D:Copy+Eq+Debug+Hash, H : Hasher+Default {
 
-    /// Allocates a new ProbMinHash3a structure with nbhash functions and initial object initobj to fill signature.  
+    /// Allocates a new ProbMinHash3a structure with nbhash >= 2 functions and initial object initobj to fill signature.  
     /// The precision on the final estimation depends on the number of hash functions.   
     /// The initial object can be any object , typically 0 for numerical objects.
     pub fn new(nbhash:usize, initobj : D) -> Self {
