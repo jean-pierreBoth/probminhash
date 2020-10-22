@@ -9,8 +9,8 @@
 //! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //! 
 //! The generic type D must satisfy D:Copy+Eq+Hash+Debug  
-//! The algorithms requires random generators to be initialized o we need to map (at least approximately)
-//! injectively objects into a u64 so the of objcts must satisfy H.
+//! The algorithms requires random generators to be initialized by the objects so we need to map (at least approximately
+//! injectively) objects into a u64 so the of objcts must satisfy Hash.
 //! If D is of type u64 it is possible to use a NoHasher (cd module nohasher)
 
 use log::{trace};
@@ -179,8 +179,8 @@ impl MaxValueTracker {
 
 
 /// A Trait to define association of a weight to an object.
-/// Typically we could implement trait WeightedSet for an IndexMap<Object, f64> giving a weight to each object
-/// or encapsulate a function associating a weight to an object
+/// Typically we could implement trait WeightedSet for any collection of Object if we have a function giving a weight to each object
+/// Then hash_wset function can be used.
 pub trait WeightedSet {
     type Object;
     /// returns the weight of an object
@@ -188,16 +188,13 @@ pub trait WeightedSet {
 }
 
 
+/// implementation of the algorithm ProbMinHash3a as described in Etrl.  
+/// It needs less memory than Probminhash3 but can be a little slower. 
+///  
 /// The algorithms requires random generators to be initialized by objects hashed. 
-/// So we need to map (at least approximately) injectively objects hashed into a u64.
-/// 
-
-
-/// implementation of the algorithm ProbMinHash3.  
-/// D must be convertible injectively into a usize for random generator initialization hence the requirement d:H.  
-/// If all data are referred to by an index, for example if objects are stored in an IndexMap<D, f64, Hidx>,
-/// D is the index.  
-/// see function hash_weigthed_idxmap
+/// So D must be convertible (at least partially) injectively into a u64 for random generator initialization hence the requirement D:H.  
+/// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example 
+/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, the no hash is need and you can use NoHasher
 pub struct ProbMinHash3<D, H: Hasher+Default> 
             where D:Copy+Eq+Hash+Debug   {
     m : usize,
@@ -305,10 +302,12 @@ impl<D,H> ProbMinHash3<D, H>
 
 
 /// implementation of the algorithm ProbMinHash3a as described in Etrl.  
-/// This version of ProbMinHash3 is faster but needs some more memory as it store some states
+/// This version of ProbMinHash3 is faster but needs some more memory as it stores some states
 /// between 2 passes on data.
-/// D must be convertible injectively into a usize for random generator initialization hence the requirement Into<usize>
-/// If all data are directly referred to by an index D, is the index (usize)
+///
+/// D must be convertible injectively into a usize for random generator initialization hence the requirement Hash.  
+/// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example if
+/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, then no hash is need and you can use NoHasher
 pub struct ProbMinHash3a<D,H> 
             where D:Copy+Eq+Hash+Debug,
                   H:Hasher+Default  {
@@ -427,7 +426,7 @@ impl <D,H> ProbMinHash3a<D,H>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/// fisher Yates random permutation generation (sampling without replacement), with lazy generation
+/// Fisher Yates random permutation generation (sampling without replacement), with lazy generation
 /// of an array of size n
 pub struct FYshuffle {
     m: usize,
@@ -487,8 +486,10 @@ impl FYshuffle {
 
 
 /// implementation of the algorithm ProbMinHash2 as described in Ertl paper.  
-/// D must be convertible injectively into a usize for random generator initialization hence the requirement Into<usize>.
-/// If all data are directly referred to by an index, then  D is the index (usize)
+///
+/// D must be convertible injectively into a usize for random generator initialization hence the requirement Hash.  
+/// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example if
+/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, then no hash is need and you can use NoHasher
 pub struct ProbMinHash2<D,H> 
             where D:Copy+Eq+Hash+Debug,H:Hasher+Default    {
     m : usize,
