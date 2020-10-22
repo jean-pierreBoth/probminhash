@@ -8,10 +8,10 @@
 //! <https://ieeexplore.ieee.org/document/8637426> or <https://arxiv.org/abs/1809.04052>.  
 //! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //! 
-//! The generic type D must satisfy D:Copy+Eq+Hash+Debug+Into\<usize\>.  
+//! The generic type D must satisfy D:Copy+Eq+Hash+Debug  
 //! The algorithms requires random generators to be initialized o we need to map (at least approximately)
 //! injectively objects into a u64 so the of objcts must satisfy H.
-//! If D is of type u64 it is possible to use a NoHasher
+//! If D is of type u64 it is possible to use a NoHasher (cd module nohasher)
 
 use log::{trace};
 
@@ -189,17 +189,13 @@ pub trait WeightedSet {
 
 
 /// The algorithms requires random generators to be initialized by objects hashed. 
-/// So we need to map (at least approximately) injectively objects hashed into a usize.
-/// We do not rely upon  a Into<usize> constraint as it would require a reverse From<D>.
-/// But we provide trivial to usize conversion for integers often used in indexing objects hashed.
-/// This is not aesthetic but preserves to possibility of using the structure with user's type
-/// for which a a conveninent mapping to usize exists.
+/// So we need to map (at least approximately) injectively objects hashed into a u64.
 /// 
 
 
 /// implementation of the algorithm ProbMinHash3.  
-/// D must be convertible injectively into a usize for random generator initialization hence the requirement Into\<usize\>.  
-/// If all data are referred to by an index, for example if objects are stored in an IndexMap<D, f64, H>,
+/// D must be convertible injectively into a usize for random generator initialization hence the requirement d:H.  
+/// If all data are referred to by an index, for example if objects are stored in an IndexMap<D, f64, Hidx>,
 /// D is the index.  
 /// see function hash_weigthed_idxmap
 pub struct ProbMinHash3<D, H: Hasher+Default> 
