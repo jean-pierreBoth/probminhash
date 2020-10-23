@@ -492,7 +492,7 @@ impl FYshuffle {
 ///
 /// D must be convertible injectively into a usize for random generator initialization hence the requirement Hash.  
 /// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example if
-/// data comes in a Vec<D,f64> then D is in fact the index in the Vector, then no hash is need and you can use NoHasher
+/// data comes in a Vec<(D,f64)> then D can be replaced by the rank in the Vector, then no hash is need and you can use NoHasher
 pub struct ProbMinHash2<D,H> 
             where D:Copy+Eq+Hash+Debug,H:Hasher+Default    {
     m : usize,
