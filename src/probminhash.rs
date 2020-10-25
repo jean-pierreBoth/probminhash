@@ -13,7 +13,8 @@
 //! injectively) objects into a u64 so the of objcts must satisfy Hash.
 //! If D is of type u64 it is possible to use a NoHasher (cd module nohasher)
 
-use log::{trace};
+#[allow(unused_imports)]
+use log::{trace,debug};
 
 use std::fmt::{Debug};
 
@@ -520,7 +521,7 @@ impl <D,H> ProbMinHash2<D,H>
     /// Allocates a ProbMinHash2 structure with nbhash hash functions and initialize signature with initobj (typically 0 for numeric objects)
     pub fn new(nbhash:usize, initobj:D) -> Self {
         let h_signature = (0..nbhash).map( |_| initobj).collect();
-        let betas : Vec<f64> = (0..nbhash).map(| x | (nbhash as f64)/ (nbhash - x) as f64).collect();
+        let betas : Vec<f64> = (0..nbhash).map(| x | (nbhash as f64)/ (nbhash - x - 1) as f64).collect();
         ProbMinHash2{ m:nbhash, 
                     b_hasher :  BuildHasherDefault::<H>::default(),
                     maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
@@ -544,24 +545,22 @@ impl <D,H> ProbMinHash2<D,H>
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         self.permut_generator.reset();
         let mut i = 0;
-        let x : f64 = rng.sample(Exp1);
+        let x : f64 = Exp1.sample(&mut rng);
         let mut h : f64 = winv * x;
         let mut qmax = self.maxvaluetracker.get_max_value();
         //
         while h < qmax {
             let k = self.permut_generator.next();
-            if h < self.maxvaluetracker.values[k] {
+            if h <  self.maxvaluetracker.values[k] {
                 self.signature[k] = id;
                 // 
                 self.maxvaluetracker.update(k, h);
                 qmax = self.maxvaluetracker.get_max_value();
                 if h >= qmax { break;}
             }
-            i = i+1;
-            let x : f64 = rng.sample(Exp1);
-            // note : we have incremented i before accessing to betas to be coherent i initialization to 0
-            // and beta indexing.
+            let x : f64 = Exp1.sample(&mut rng);
             h = h + winv * self.betas[i] * x;
+            i = i+1;
             assert!(i < self.m);
         }
     }  // end of hash_item 
@@ -703,13 +702,13 @@ use super::*;
         //
         log_init_test();
         //
-        debug!("test_probminhash_count_intersection_equal_weights");
-        println!("test_probminhash_count_intersection_equal_weights");
+        debug!("test_probminhash3_count_intersection_equal_weights");
+        println!("test_probminhash3_count_intersection_equal_weights");
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
         let set_size = 100;
-        let nbhash = 10;
+        let nbhash = 50;
         //
         // choose weights for va and vb elements
         let mut wa = Vec::<f64>::with_capacity(set_size);
@@ -771,6 +770,7 @@ use super::*;
 //       wbprobhash.maxvaluetracker.dump();
         //
         info!("exact jp = {} ,jp estimated = {} ", jp, jp_approx);
+        assert!(jp_approx > 0.);
     } // end of test_prob_count_intersection
 
 
@@ -838,6 +838,7 @@ fn test_probminhash3a_count_intersection_unequal_weights() {
 //    wbprobhash.maxvaluetracker.dump();
     //
     info!("jp exact= {jptheo:.3} , jp estimate = {jp_est:.3} ", jptheo=jp, jp_est=jp_approx);
+    assert!(jp_approx > 0.);
 } // end of test_probminhash3a_count_intersection_unequal_weights
 
 
@@ -910,10 +911,13 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     }
     trace!("Jp = {} ",jp);
     //
-//    waprobhash.maxvaluetracker.dump();
-//    wbprobhash.maxvaluetracker.dump();
+//   waprobhash.maxvaluetracker.dump();
+//   wbprobhash.maxvaluetracker.dump();
+//    println!("siga :  {:?}", siga);
+//   println!("sigb :  {:?}", sigb);
     //
     info!("jp exact = {jp_exact:.3} , jp estimate {jp_estimate:.3} ", jp_exact=jp, jp_estimate=jp_approx);
+    assert!(jp_approx > 0.);
 } // end of test_probminhash3_count_intersection_unequal_weights
 
 
@@ -944,10 +948,14 @@ fn test_fyshuffle() {
     let sigma = (th_var/ (nb_permut as f64)).sqrt();
     for i in 0..freq.len() {
         let rel_error = ((freq[i] as f64)/ (nb_permut as f64) - th_freq)/ sigma;
-        trace!(" slot i {} , rel error = {}", i, rel_error);
+        info!(" slot i {} , rel error = {}", i, rel_error);
         assert!( rel_error.abs() < 3.)
     }
-    trace!("  freq = {:?}", freq);
+    info!("  freq = {:?}", freq);
+    for _ in 0..60 {
+        fypermut.next();
+        println!("permut state {:?} ", fypermut.get_values());
+    }
 } // end of test_fyshuffle
 
 
@@ -987,17 +995,17 @@ fn test_probminhash2_count_intersection_unequal_weights() {
         }
     }        
     // compute Jp as in 
-    let mut jp = 0.;
+    let mut jp_exact = 0.;
     for i in 0..set_size {
         if wa[i] > 0. && wb[i] > 0. {
             let mut den = 0.;
             for j in 0..set_size {
                 den += (wa[j]/wa[i]).max(wb[j]/wb[i]);
             }
-            jp += 1./den;
+            jp_exact += 1./den;
         }
     }
-    trace!("Jp = {} ",jp);
+    trace!("Jp = {} ",jp_exact);
     // probminhash 
     trace!("\n\n hashing wa");
     let mut waprobhash = ProbMinHash2::<usize, FnvHasher>::new(nbhash, 0);
@@ -1017,17 +1025,88 @@ fn test_probminhash2_count_intersection_unequal_weights() {
     }        
     let siga = waprobhash.get_signature();
     let sigb = wbprobhash.get_signature();
-    let mut inter = 0;
-    for i in 0..siga.len() {
-        if siga[i] == sigb[i] {
-            inter += 1;
+    let jp_estimate = compute_probminhash_jaccard(siga, sigb);
+    //
+//    waprobhash.maxvaluetracker.dump();
+//    wbprobhash.maxvaluetracker.dump();
+//    println!("siga :  {:?}", siga);
+//    println!("sigb :  {:?}", sigb);
+    //
+    info!("jp exact = {jp_exact:.3} , jp estimate {jp_estimate:.3} ", jp_exact=jp_exact, jp_estimate=jp_estimate);
+} // end of test_probminhash2_count_intersection_unequal_weights
+
+
+#[test] 
+fn test_probminhash2_count_intersection_equal_weights() {
+    //
+    log_init_test();
+    //
+    println!("test_probminhash2_count_intersection_equal_weights");
+    debug!("test_probminhash2_count_intersection_equal_weights");
+    // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+    // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
+    //
+    let set_size = 100;
+    let nbhash = 500;
+    //
+    // choose weights for va and vb elements
+    let mut wa = Vec::<f64>::with_capacity(set_size);
+    let mut wb = Vec::<f64>::with_capacity(set_size);
+    // initialize wa, weight 20 up to 130
+    for i in 0..set_size {
+        if i < 80 {
+            wa.push(1.);
+        }
+        else {
+            wa.push(0.);
         }
     }
-    //
+    // initialize wb weight 10 above 70
+    for i in 0..set_size {
+        if i < 50 {
+            wb.push(0.);
+        }
+        else {
+            wb.push(1.);
+        }
+    }        
+    // compute Jp as in 
+    let mut jp_exact = 0.;
+    for i in 0..set_size {
+        if wa[i] > 0. && wb[i] > 0. {
+            let mut den = 0.;
+            for j in 0..set_size {
+                den += (wa[j]/wa[i]).max(wb[j]/wb[i]);
+            }
+            jp_exact += 1./den;
+        }
+    }
+    trace!("Jp = {} ",jp_exact);
+    // probminhash 
+    trace!("\n\n hashing wa");
+    let mut waprobhash = ProbMinHash2::<usize, FnvHasher>::new(nbhash, 0);
+    for i in 0..set_size {
+        if wa[i] > 0. {
+            waprobhash.hash_item(i, wa[i]);
+        }
+    }
     // waprobhash.maxvaluetracker.dump();
-    // wbprobhash.maxvaluetracker.dump();
     //
-    info!("jp = {} , inter / card = {} ", jp, inter as f64/siga.len() as f64);
+    trace!("\n\n hashing wb");
+    let mut wbprobhash = ProbMinHash2::<usize, FnvHasher>::new(nbhash, 0);
+    for i in 0..set_size {
+        if wb[i] > 0. {
+            wbprobhash.hash_item(i, wb[i]);
+        }
+    }        
+    let siga = waprobhash.get_signature();
+    let sigb = wbprobhash.get_signature();
+    let jp_estimate = compute_probminhash_jaccard(siga, sigb);
+    //
+//    waprobhash.maxvaluetracker.dump();
+//    wbprobhash.maxvaluetracker.dump();
+    //
+    info!("jp exact = {jp_exact:.3} , jp estimate {jp_estimate:.3} ", jp_exact=jp_exact, jp_estimate=jp_estimate);
 } // end of test_probminhash2_count_intersection_unequal_weights
 
 
