@@ -437,7 +437,6 @@ impl <D,H> ProbMinHash3a<D,H>
 /// of an array of size n
 pub struct FYshuffle {
     m: usize,
-    rng : Xoshiro256PlusPlus,
     /// uniform distribution on [0,1)
     unif_01 : Uniform<f64>,
     ///
@@ -450,9 +449,7 @@ impl FYshuffle {
     /// initialize a random permutation generator on a set of size m
     pub fn new(m: usize) -> FYshuffle {
         let v : Vec<usize> = (0..m).map(|x| x).collect();
-        // seed Xoshiro256PlusPlus with WyRng...
-        let mut rng_init = WyRng::default();
-        FYshuffle{m:m, rng:Xoshiro256PlusPlus::seed_from_u64(rng_init.next_u64()), unif_01: Uniform::<f64>::new(0., 1.), v : v, lastidx:m}
+        FYshuffle{m:m, unif_01: Uniform::<f64>::new(0., 1.), v : v, lastidx:m}
     }
 
     // See https://www.geeksforgeeks.org/generate-a-random-permutation-of-1-to-n/
@@ -463,11 +460,11 @@ impl FYshuffle {
     /// as the permutation is fully sampled.
     /// If called more than m times, it calls reset implicitly to generate a new permutation.
     /// It is possible (and recommended) to reset explicitly after m successive call to next method
-    pub fn next(&mut self) -> usize {
+    pub fn next(&mut self, rng : &mut Xoshiro256PlusPlus) -> usize {
         if self.lastidx >= self.m {
-            self.lastidx = 0;
+            self.reset();
         }
-        let xsi = self.unif_01.sample(&mut self.rng);
+        let xsi = self.unif_01.sample(rng);
         // sample between self.lastidx (included) and self.m (excluded)
         let idx = self.lastidx + (xsi * (self.m - self.lastidx) as f64) as usize;
         let val = self.v[idx];
@@ -478,7 +475,11 @@ impl FYshuffle {
     }
 
     pub fn reset(&mut self) {
+        trace!("resetting shuffle lastidx = {}", self.lastidx);
         self.lastidx = 0;
+        for i in 0..self.m {
+            self.v[i] = i;
+        }
     }
 
     /// returns the set of permuted index
@@ -550,7 +551,7 @@ impl <D,H> ProbMinHash2<D,H>
         let mut qmax = self.maxvaluetracker.get_max_value();
         //
         while h < qmax {
-            let k = self.permut_generator.next();
+            let k = self.permut_generator.next(&mut rng);
             if h <  self.maxvaluetracker.values[k] {
                 self.signature[k] = id;
                 // 
@@ -929,18 +930,21 @@ fn test_probminhash3_count_intersection_unequal_weights() {
 fn test_fyshuffle() {
 
     log_init_test();
-
+    let mut rng = Xoshiro256PlusPlus::seed_from_u64(45678 as u64);
     let m = 4;
     let mut fypermut = FYshuffle::new(m);
     let nb_permut = 500000;
     let mut freq : Vec<usize> = (0..m).map(|_| 0).collect();
 
     for _ in 0..nb_permut {
-        fypermut.next();
+        for _ in 0..m {
+            fypermut.next(&mut rng);
+        }
         let v = fypermut.get_values();
         for k in 0..v.len() {
             freq[k] += v[k];
         }
+        fypermut.reset();
     }
 
     let th_freq = 1.5;
@@ -952,9 +956,12 @@ fn test_fyshuffle() {
         assert!( rel_error.abs() < 3.)
     }
     info!("  freq = {:?}", freq);
-    for _ in 0..60 {
-        fypermut.next();
+    for _ in 0..15 {
+        for _ in 0..m {
+            fypermut.next(&mut rng);
+        }
         println!("permut state {:?} ", fypermut.get_values());
+        fypermut.reset();
     }
 } // end of test_fyshuffle
 
@@ -1033,6 +1040,7 @@ fn test_probminhash2_count_intersection_unequal_weights() {
 //    println!("sigb :  {:?}", sigb);
     //
     info!("jp exact = {jp_exact:.3} , jp estimate {jp_estimate:.3} ", jp_exact=jp_exact, jp_estimate=jp_estimate);
+    assert!(jp_estimate > 0.);
 } // end of test_probminhash2_count_intersection_unequal_weights
 
 
@@ -1047,7 +1055,7 @@ fn test_probminhash2_count_intersection_equal_weights() {
     // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
     //
     let set_size = 100;
-    let nbhash = 500;
+    let nbhash = 50;
     //
     // choose weights for va and vb elements
     let mut wa = Vec::<f64>::with_capacity(set_size);
@@ -1107,6 +1115,7 @@ fn test_probminhash2_count_intersection_equal_weights() {
 //    wbprobhash.maxvaluetracker.dump();
     //
     info!("jp exact = {jp_exact:.3} , jp estimate {jp_estimate:.3} ", jp_exact=jp_exact, jp_estimate=jp_estimate);
+    assert!(jp_estimate > 0.);
 } // end of test_probminhash2_count_intersection_unequal_weights
 
 
