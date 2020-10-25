@@ -200,7 +200,7 @@ pub struct ProbMinHash3<D, H: Hasher+Default>
             where D:Copy+Eq+Hash+Debug   {
     m : usize,
     ///
-    b_hasher: H,
+    b_hasher: BuildHasherDefault<H>,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// a exponential law restricted to interval [0., 1)
@@ -221,7 +221,7 @@ impl<D,H> ProbMinHash3<D, H>
         assert!(nbhash >= 2);
         let lambda = ((nbhash as f64)/((nbhash - 1) as f64)).ln();
         let h_signature = (0..nbhash).map( |_| initobj).collect();
-        ProbMinHash3{m:nbhash, b_hasher : BuildHasherDefault::<H>::default().build_hasher(), 
+        ProbMinHash3{m:nbhash, b_hasher : BuildHasherDefault::<H>::default(), 
                     maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
                     exp01:ExpRestricted01::new(lambda), signature:h_signature}
     } // end of new
@@ -236,8 +236,9 @@ impl<D,H> ProbMinHash3<D, H>
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv = 1./weight;
         let unif0m = Uniform::<usize>::new(0, self.m);
-        id.hash(&mut self.b_hasher);
-        let id_hash : u64 = self.b_hasher.finish();
+        let mut hasher = self.b_hasher.build_hasher();
+        id.hash(&mut hasher);
+        let id_hash : u64 = hasher.finish();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         let mut h = winv * self.exp01.sample(&mut rng);
         let mut i = 1;
@@ -316,7 +317,7 @@ pub struct ProbMinHash3a<D,H>
                   H:Hasher+Default  {
     m : usize,
     ///
-    hasher : H,
+    b_hasher : BuildHasherDefault::<H>,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// a exponential law restricted to interval [0., 1)
@@ -341,7 +342,7 @@ impl <D,H> ProbMinHash3a<D,H>
         let h_signature = (0..nbhash).map( |_| initobj).collect();
         ProbMinHash3a{m:nbhash, 
                 maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
-                hasher : BuildHasherDefault::<H>::default().build_hasher(),
+                b_hasher : BuildHasherDefault::<H>::default(),
                 exp01:ExpRestricted01::new(lambda), 
                 to_be_processed : Vec::<(D, f64, Xoshiro256PlusPlus)>::new(),
                 signature:h_signature}
@@ -363,8 +364,10 @@ impl <D,H> ProbMinHash3a<D,H>
                 if let Some(weight) = data.get(key) {
                     trace!("hash_item : id {:?}  weight {} ", key, weight);
                     let winv = 1./weight;
-                    key.hash(&mut self.hasher);
-                    let new_hash : u64 = self.hasher.finish();
+                    // rebuild a new hasher at each id for reproductibility
+                    let mut hasher = self.b_hasher.build_hasher();
+                    key.hash(&mut hasher);
+                    let new_hash : u64 = hasher.finish();
                     let mut rng = Xoshiro256PlusPlus::seed_from_u64(new_hash);
                     let h = winv * self.exp01.sample(&mut rng);
                     qmax = self.maxvaluetracker.get_max_value();
@@ -497,7 +500,7 @@ pub struct ProbMinHash2<D,H>
             where D:Copy+Eq+Hash+Debug,H:Hasher+Default    {
     m : usize,
     ///
-    hasher : H,
+    b_hasher : BuildHasherDefault<H>,
     /// field to keep track of max hashed values
     maxvaluetracker : MaxValueTracker,
     /// random permutation generator
@@ -519,7 +522,7 @@ impl <D,H> ProbMinHash2<D,H>
         let h_signature = (0..nbhash).map( |_| initobj).collect();
         let betas : Vec<f64> = (0..nbhash).map(| x | (nbhash as f64)/ (nbhash - x) as f64).collect();
         ProbMinHash2{ m:nbhash, 
-                    hasher :  BuildHasherDefault::<H>::default().build_hasher(),
+                    b_hasher :  BuildHasherDefault::<H>::default(),
                     maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
                     permut_generator : FYshuffle::new(nbhash),
                     betas : betas,
@@ -535,8 +538,9 @@ impl <D,H> ProbMinHash2<D,H>
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv : f64 = 1./weight;
-        id.hash(&mut self.hasher);
-        let id_hash : u64 = self.hasher.finish();
+        let mut hasher = self.b_hasher.build_hasher();
+        id.hash(&mut hasher);
+        let id_hash : u64 = hasher.finish();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         self.permut_generator.reset();
         let mut i = 0;
