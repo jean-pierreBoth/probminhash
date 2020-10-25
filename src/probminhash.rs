@@ -23,7 +23,6 @@ use rand_distr::Exp1;
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use wyhash::*;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use indexmap::{IndexMap};
 
