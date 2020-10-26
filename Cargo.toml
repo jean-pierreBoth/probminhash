@@ -6,7 +6,7 @@ repository = "https://github.com/jean-pierreBoth/probminhash"
 documentation = "https://docs.rs/probminhash"
 keywords = ["minhash", "lsh", "jaccard"]
 edition = "2018"
-
+license = "MIT OR Apache-2.0"
 
 [features]
 
