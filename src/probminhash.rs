@@ -696,6 +696,9 @@ use super::*;
 //        tracker.dump();
     } // end of test_probminhash_count_range_intersection
 
+
+
+    
     #[test] 
     // This test checks that with equal weights we fall back to Jaccard estimate
     fn test_probminhash3_count_intersection_equal_weights() {
@@ -1061,7 +1064,7 @@ fn test_probminhash2_count_intersection_equal_weights() {
     let mut wb = Vec::<f64>::with_capacity(set_size);
     // initialize wa, weight 20 up to 130
     for i in 0..set_size {
-        if i < 80 {
+        if i < 70 {
             wa.push(1.);
         }
         else {
