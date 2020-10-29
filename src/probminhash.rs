@@ -188,6 +188,22 @@ pub trait WeightedSet {
 }
 
 
+/// A trait common to all ProbMinHash struct
+/// It defines the common methods of various ProbMinHash algorithms
+/// Some ProbMinHash have more methods in particular the function hash_item for ProbMinHash3 and ProbMinHash2
+pub trait ProbMinHasher<D,H> where 
+            D:Copy+Eq+Hash+Debug     {
+    ///
+    fn get_signature(&self) -> &Vec<D>;
+    /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
+    /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
+    /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
+    fn hash_weigthed_idxmap<Hidx:std::hash::BuildHasher>(&mut self, data: &IndexMap<D, f64, Hidx>);
+}
+
+
+
+
 /// implementation of the algorithm ProbMinHash3a as described in Etrl.  
 /// It needs less memory than Probminhash3 but can be a little slower.   
 /// Probminhash3 needs at least 2 hash values to run.
@@ -262,10 +278,6 @@ impl<D,H> ProbMinHash3<D, H>
         }
     } // end of hash_item
 
-    /// return final signature.
-    pub fn get_signature(&self) -> &Vec<D> {
-        return &self.signature
-    }
 
     /// hash data when given by an iterable WeightedSet
     pub fn hash_wset<T>(&mut self, data: &mut T)
@@ -276,33 +288,40 @@ impl<D,H> ProbMinHash3<D, H>
             }
     } // end of hash method
 
+}  // end of impl ProbMinHash3
+
+
+impl <D,H> ProbMinHasher<D,H> for ProbMinHash3<D,H> 
+        where D: Debug+Hash+Eq+Copy,
+              H: Default+Hasher   {
+
+    /// returns final signature
+    fn get_signature(&self) -> &Vec<D> {
+            return &self.signature;
+    }
 
     /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
     /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
     /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
-    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &mut IndexMap<D, f64, Hidx>) 
-                where   Hidx : std::hash::BuildHasher, 
-    {
+    fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
+        where   Hidx : std::hash::BuildHasher {
         let mut objects = data.keys();
         loop {
             match objects.next() {
                 Some(key) => {
                     trace!(" retrieved key {:?} ", key);  
-                   // we must convert Kmer64bit to u64 and be able to retrieve the original Kmer64bit
+                    // we must convert Kmer64bit to u64 and be able to retrieve the original Kmer64bit
                     if let Some(weight) = data.get(key) {
                         // we got weight as something convertible to f64
                         self.hash_item(*key, *weight);
                     };
                 },
                 None => break,
-            }
-        }
+            } // end match 
+        } // end loop 
     }  // end of hash_weigthed_idxmap
 
-}  // end of impl ProbMinHash3
-
-
-
+}
 
 /// implementation of the algorithm ProbMinHash3a as described in Etrl.  
 /// This version of ProbMinHash3 is faster but needs some more memory as it stores some states
@@ -348,13 +367,24 @@ impl <D,H> ProbMinHash3a<D,H>
                 signature:h_signature}
     } // end of new
 
+} // end of ProbMinHash3a
 
-    /// It is the building block of the computation, but this method 
-    /// does not check for unicity of id added in hash computation.  
-    /// It is user responsability to enforce that. See method hashWSet
-    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
-                where   Hidx : std::hash::BuildHasher  {
-        //
+
+
+impl <D,H> ProbMinHasher<D,H> for ProbMinHash3a<D,H> 
+        where D: Debug+Hash+Eq+Copy,
+              H: Default+Hasher   {
+
+    /// returns final signature
+    fn get_signature(&self) -> &Vec<D> {
+            return &self.signature;
+    }
+
+    /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
+    /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
+    /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
+    fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
+    where   Hidx : std::hash::BuildHasher {
         let mut objects = data.keys();
         let unif0m = Uniform::<usize>::new(0, self.m);
         let mut qmax:f64 = self.maxvaluetracker.get_max_value();
@@ -422,13 +452,10 @@ impl <D,H> ProbMinHash3a<D,H>
             self.to_be_processed.truncate(insert_pos);
             i = i+1;
         }  // end of while 
-    } // end of hash_weigthed_idxmap
+    }  // end of hash_weigthed_idxmap
 
-    /// return final signature.
-    pub fn get_signature(&self) -> &Vec<D> {
-        return &self.signature;
-    }
-} // end of ProbMinHash3a
+}  // end impl ProbMinHasher for ProbMinHash3a
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -575,11 +602,39 @@ impl <D,H> ProbMinHash2<D,H>
         }
     } // end of hash method
 
-    /// return final signature.
-    pub fn get_signature(&self) -> &Vec<D> {
-        return &self.signature;
-    }
+
 }  // end of implementation block for ProbMinHash2
+
+
+
+
+impl <D,H> ProbMinHasher<D,H> for ProbMinHash2<D,H> 
+        where D: Debug+Hash+Eq+Copy,
+              H: Default+Hasher   {
+
+    /// returns final signature
+    fn get_signature(&self) -> &Vec<D> {
+            return &self.signature;
+    }
+
+    fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
+    where   Hidx : std::hash::BuildHasher {
+        let mut objects = data.keys();
+        loop {
+            match objects.next() {
+                Some(key) => {
+                    trace!(" retrieved key {:?} ", key);  
+                    // we must convert Kmer64bit to u64 and be able to retrieve the original Kmer64bit
+                    if let Some(weight) = data.get(key) {
+                        // we got weight as something convertible to f64
+                        self.hash_item(*key, *weight);
+                    };
+                },
+                None => break,
+            } // end match 
+        } // end loop 
+    }  // end of hash_weigthed_idxmap
+}
 
 
 
@@ -598,6 +653,29 @@ pub fn compute_probminhash_jaccard<D:Eq>(siga : &Vec<D>, sigb : &Vec<D>) -> f64 
     let jp = inter as f64/siga.len() as f64;
     jp
 }  // end of compute_probminhash_jaccard
+
+
+
+/// Get coomon objects from signature if any in a Vec<D> else return None
+pub fn get_common_objects<D:Eq+Copy>(siga : &Vec<D>, sigb : &Vec<D>) -> Option<Vec<D>> {
+    let sig_size = siga.len();
+    assert_eq!(sig_size, sigb.len());
+    let mut common = Vec::<D>::new();
+    //
+    for i in 0..siga.len() {
+        if siga[i] == sigb[i] {
+            common.push(siga[i]);
+        }
+    }
+    if common.len() > 0 {
+        return Some(common);
+    }
+    else {
+        return None;
+    }
+}  // end of get_common_objects
+
+
 
 //=================================================================
 
