@@ -29,22 +29,21 @@ doc=true
 # cargo doc --no-deps avoid dependencies doc generation
 #
 
-time = {version = "0.2",  doc = false}
+time = {version = "0.2"}
 
 #  for hashing 
-wyhash = {version = "0.4", doc = false}
-rand = {version = "0.7", doc = false}
-rand_distr = {version = "0.3", doc = false}
-rand_xorshift = {version = "0.2", doc = false}
-rand_xoshiro = {version = "0.4", doc = false}
+rand = {version = "0.7"}
+rand_distr = {version = "0.3"}
+rand_xorshift = {version = "0.2"}
+rand_xoshiro = {version = "0.4"}
 
-fxhash = { version= "0.2", doc = false}
-indexmap = { version = "1.6", doc = false}
+fxhash = { version= "0.2"}
+indexmap = { version = "1.6"}
 fnv = {version= "1.0"}
 
 lazy_static = { version = "1.4"}
 
 # decreasing order of log for debug build : (max_level_)trace debug info warn error off
 # decreasing order of log for release build (release_max_level_)  .. idem
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
+log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 env_logger = { version = "0.7"}
