@@ -6,8 +6,8 @@ extern crate lazy_static;
 
 
 
-pub mod probminhash;
-pub mod superminhash;
+pub mod probminhasher;
+pub mod superminhasher;
 pub mod invhash;
 pub mod nohasher;
 
