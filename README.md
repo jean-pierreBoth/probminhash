@@ -9,7 +9,7 @@ It implements:
 [probminhash Ertl](https://arxiv.org/abs/1911.00675).
 
 These algorithms compute an estimation of the Jaccard weighted index via sensitive hashing.
-It is an extension of the Jaccard index to the case where objects have a weight, or a multiplicity associated.
+It is an extension of the Jaccard index to the case where objects have a weight, or a multiplicity associated.  
 This Jaccard  weighted index provides a metric on discrete probability distributions as explained in :
 **Moulton Jiang. Maximally consistent sampling and the Jaccard index of probability distributions (2018)**
 [Moulton-Jiang-ieee](https://ieeexplore.ieee.org/document/8637426) or [Moulton-Jiang-arxiv](https://arxiv.org/abs/1809.04052)
