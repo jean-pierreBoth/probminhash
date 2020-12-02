@@ -349,9 +349,8 @@ impl <D,H> ProbMinHash3a<D,H>
     } // end of new
 
 
-    /// It is the building block of the computation, but this method 
-    /// does not check for unicity of id added in hash computation.  
-    /// It is user responsability to enforce that. See method hashWSet
+    /// It is the entry point of this hash algorithm.
+    /// The indexmap gives multiplicity (or weight) to the objects hashed.
     pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
                 where   Hidx : std::hash::BuildHasher  {
         //
@@ -583,10 +582,12 @@ impl <D,H> ProbMinHash2<D,H>
 
 
 
-/// computes the weighted jaccard index of 2 signatures.
+/// Computes the weighted jaccard index of 2 signatures.
 /// The 2 signatures must come from two equivalent instances of the same ProbMinHash algorithm
-/// with the same number of hash signatures 
-pub fn compute_probminhash_jaccard<D:Eq>(siga : &Vec<D>, sigb : &Vec<D>) -> f64 {
+/// with the same number of hash signatures. 
+/// Note that if *jp* is the returned value of this function,  
+/// the distance between siga and sigb, associated to the jaccard index is *1.- jp* 
+pub fn compute_probminhash_jaccard<D:Eq>(siga : &[D], sigb : &[D]) -> f64 {
     let sig_size = siga.len();
     assert_eq!(sig_size, sigb.len());
     let mut inter = 0;
