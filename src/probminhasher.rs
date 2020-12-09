@@ -280,7 +280,7 @@ impl<D,H> ProbMinHash3<D, H>
     /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
     /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
     /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
-    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &mut IndexMap<D, f64, Hidx>) 
+    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
                 where   Hidx : std::hash::BuildHasher, 
     {
         let mut objects = data.keys();
