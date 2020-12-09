@@ -26,6 +26,7 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use indexmap::{IndexMap};
 
+use std::collections::HashMap;
 /// Structure for defining exponential sampling of parameter lambda with support restricted
 /// to unit interval [0,1).  
 // All comments follow notations in Ertl article
@@ -299,6 +300,29 @@ impl<D,H> ProbMinHash3<D, H>
         }
     }  // end of hash_weigthed_idxmap
 
+    
+    /// computes set signature when set is given as an HashMap with weights corresponding to values.(equivalent to the method with and IndexMap)
+    /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
+    /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
+    pub fn hash_weigthed_hashmap<Hidx>(&mut self, data: &HashMap<D, f64, Hidx>) 
+                where   Hidx : std::hash::BuildHasher, 
+    {
+        let mut objects = data.keys();
+        loop {
+            match objects.next() {
+                Some(key) => {
+                    trace!(" retrieved key {:?} ", key);  
+                   // we must convert Kmer64bit to u64 and be able to retrieve the original Kmer64bit
+                    if let Some(weight) = data.get(key) {
+                        // we got weight as something convertible to f64
+                        self.hash_item(*key, *weight);
+                    };
+                },
+                None => break,
+            }
+        }
+    }  // end of hash_weigthed_hashmap
+    
 }  // end of impl ProbMinHash3
 
 
@@ -422,6 +446,85 @@ impl <D,H> ProbMinHash3a<D,H>
             i = i+1;
         }  // end of while 
     } // end of hash_weigthed_idxmap
+
+
+
+    /// It is the entry point of this hash algorithm with a HashMap (same as with IndexMap just in case)
+    /// The HashMap gives multiplicity (or weight) to the objects hashed.
+    pub fn hash_weigthed_hashmap<Hidx>(&mut self, data: &HashMap<D, f64, Hidx>) 
+                where   Hidx : std::hash::BuildHasher  {
+        //
+        let mut objects = data.keys();
+        let unif0m = Uniform::<usize>::new(0, self.m);
+        let mut qmax:f64 = self.maxvaluetracker.get_max_value();
+
+        loop {
+            if let Some(key) = objects.next() {
+                if let Some(weight) = data.get(key) {
+                    trace!("hash_item : id {:?}  weight {} ", key, weight);
+                    let winv = 1./weight;
+                    // rebuild a new hasher at each id for reproductibility
+                    let mut hasher = self.b_hasher.build_hasher();
+                    key.hash(&mut hasher);
+                    let new_hash : u64 = hasher.finish();
+                    let mut rng = Xoshiro256PlusPlus::seed_from_u64(new_hash);
+                    let h = winv * self.exp01.sample(&mut rng);
+                    qmax = self.maxvaluetracker.get_max_value();
+                    
+                    if h < qmax {
+                        let k = unif0m.sample(&mut rng);
+                        assert!(k < self.m);
+                        if h < self.maxvaluetracker.values[k] {
+                            self.signature[k] = *key;
+                            // 
+                            self.maxvaluetracker.update(k, h);
+                            qmax = self.maxvaluetracker.get_max_value();
+                        }
+                        if winv < qmax {
+                            // we store point for further processing in second step, if inequality is not verified
+                            // it cannot be added anymore anywhere.
+                            self.to_be_processed.push((*key,winv, rng));
+                        }                       
+                    } // end if h < qmax
+                } // end some weight
+            } // end some key
+            else { 
+                break;
+            }
+        } // end initial loop
+        //
+        // now we have second step
+        //
+        let mut i = 2;    // by comparison to ProbMinHash3 we are not at i = 2 !!
+        // 
+        while self.to_be_processed.len() > 0 {
+            let mut insert_pos = 0;
+            trace!(" i : {:?}  , nb to process : {}", i , self.to_be_processed.len());
+            for j in 0..self.to_be_processed.len() {
+                let (key, winv, rng) = &mut self.to_be_processed[j];
+                let mut h = (*winv) * (i - 1) as f64;
+                if h < self.maxvaluetracker.get_max_value() {
+                    h = h + (*winv) * self.exp01.sample(rng);
+                    let k = unif0m.sample(rng);
+                    if h < self.maxvaluetracker.values[k] {
+                        self.signature[k] = *key;
+                        // 
+                        self.maxvaluetracker.update(k, h);
+                        qmax = self.maxvaluetracker.get_max_value();
+                    }
+                    if (*winv) * (i as f64) < qmax {
+                        self.to_be_processed[insert_pos] = (*key, *winv, rng.clone());
+                        insert_pos = insert_pos + 1;
+                    }
+                }
+            }  // end of for j
+            self.to_be_processed.truncate(insert_pos);
+            i = i+1;
+        }  // end of while 
+    } // end of hash_weigthed_hashmap
+
+
+
 
     /// return final signature.
     pub fn get_signature(&self) -> &Vec<D> {
