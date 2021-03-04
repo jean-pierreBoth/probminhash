@@ -1,7 +1,7 @@
 //! This provides a struct implementing Hasher trait
 //! for u64 hashed values and doing nothing
 //! to use for example in counting structures when we
-//! manipulate already hashed values!
+//! manipulate already hashed values! (taken from finch crate)
 
 
 use std::hash::{Hasher};
