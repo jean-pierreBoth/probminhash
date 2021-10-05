@@ -864,7 +864,7 @@ fn test_probminhash3a_count_intersection_unequal_weights() {
     // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
     //
     let set_size = 100;
-    let nbhash = 50;
+    let nbhash = 2000;
     //
     // choose weights for va and vb elements
     let mut wa : FnvIndexMap::<usize,f64> = FnvIndexMap::with_capacity_and_hasher(70, FnvBuildHasher::default());
@@ -878,7 +878,8 @@ fn test_probminhash3a_count_intersection_unequal_weights() {
     // initialize wb weight 10 above 70
     for i in 0..set_size {
         if i >= 50 {
-            wb.entry(i).or_insert((i as f64).powi(4));
+//            *wb.entry(i).or_insert(0.) += 2. * i as f64;  // gives jp = 0.24
+            wb.entry(i).or_insert((i as f64).powi(4));    // gives jp = 0.119
         }
     } 
     // probminhash 
@@ -932,7 +933,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
     //
     let set_size = 100;
-    let nbhash = 50;
+    let nbhash = 100;
     //
     // choose weights for va and vb elements
     let mut wa = Vec::<f64>::with_capacity(set_size);
