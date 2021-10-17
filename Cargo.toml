@@ -1,6 +1,6 @@
 [package]
 name = "probminhash"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["jeanpierre.both@gmail.com"]
 repository = "https://github.com/jean-pierreBoth/probminhash"
 documentation = "https://docs.rs/probminhash"
@@ -29,6 +29,7 @@ doc=true
 # cargo doc --no-deps avoid dependencies doc generation
 #
 
+num = {version = "0.4"}
 
 #  for hashing 
 rand = {version = "0.8"}

@@ -18,6 +18,8 @@ use log::{trace,debug};
 
 use std::fmt::{Debug};
 
+use num;
+
 use rand::distributions::{Distribution,Uniform};
 use rand_distr::Exp1;
 use rand::prelude::*;
@@ -358,16 +360,20 @@ impl <D,H> ProbMinHash3a<D,H>
 
 
     /// It is the entry point of this hash algorithm.
-    /// The indexmap gives multiplicity (or weight) to the objects hashed.
-    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
-                where   Hidx : std::hash::BuildHasher  {
+    /// The indexmap gives multiplicity (or weight of type F) to the objects hashed of type D.
+    /// The weight be positive and be convertible to a f64 without overflow (so some unsigned int)
+    pub fn hash_weigthed_idxmap<Hidx, F>(&mut self, data: &IndexMap<D, F, Hidx>) 
+                where   Hidx : std::hash::BuildHasher,
+                        F : num::ToPrimitive + std::fmt::Display {
         //
         let unif0m = Uniform::<usize>::new(0, self.m);
         let mut qmax:f64 = self.maxvaluetracker.get_max_value();
 
         let mut iter = data.iter();
-        while let Some((key, weight)) = iter.next() {
-            trace!("hash_item : id {:?}  weight {} ", key, weight);
+        while let Some((key, weight_t)) = iter.next() {
+            trace!("hash_item : id {:?}  weight {} ", key, weight_t);
+            let weight = weight_t.to_f64().unwrap();
+            assert!(weight.is_finite() && weight >= 0., "conversion to f64 failed");
             let winv = 1./weight;
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = self.b_hasher.build_hasher();
@@ -428,15 +434,19 @@ impl <D,H> ProbMinHash3a<D,H>
 
     /// It is the entry point of this hash algorithm with a HashMap (same as with IndexMap just in case)
     /// The HashMap gives multiplicity (or weight) to the objects hashed.
-    pub fn hash_weigthed_hashmap<Hidx>(&mut self, data: &HashMap<D, f64, Hidx>) 
-                where   Hidx : std::hash::BuildHasher {
+    /// The weight be positive and be convertible to a f64 without overflow (so )
+    pub fn hash_weigthed_hashmap<Hidx, F>(&mut self, data: &HashMap<D, F, Hidx>) 
+                where   Hidx : std::hash::BuildHasher ,
+                        F : num::ToPrimitive + std::fmt::Display {
         //
         let unif0m = Uniform::<usize>::new(0, self.m);
         let mut qmax:f64 = self.maxvaluetracker.get_max_value();
         let mut iter = data.iter();
 
-        while let Some((key, weight)) = iter.next() {
-            trace!("hash_item : id {:?}  weight {} ", key, weight);
+        while let Some((key, weight_t)) = iter.next() {
+            trace!("hash_item : id {:?}  weight {} ", key, weight_t);
+            let weight = weight_t.to_f64().unwrap();
+            assert!(weight.is_finite() && weight >= 0., "conversion to f64 failed");
             let winv = 1./weight;
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = self.b_hasher.build_hasher();
