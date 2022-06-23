@@ -38,7 +38,7 @@ rand_xorshift = {version = "0.3"}
 rand_xoshiro = {version = "0.6"}
 
 fxhash = { version= "0.2"}
-indexmap = { version = "1.7"}
+indexmap = { version = "1.8"}
 fnv = {version= "1.0"}
 
 lazy_static = { version = "1.4"}

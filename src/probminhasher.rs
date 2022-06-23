@@ -943,7 +943,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
     //
     let set_size = 100;
-    let nbhash = 100;
+    let nbhash = 2000;
     //
     // choose weights for va and vb elements
     let mut wa = Vec::<f64>::with_capacity(set_size);
