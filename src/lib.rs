@@ -5,8 +5,15 @@ extern crate rand;
 extern crate lazy_static;
 
 
+mod maxvaluetrack;
 
-pub mod probminhasher;
+pub mod exp01;
+pub mod weightedset;
+pub mod jaccard;
+
+pub mod probminhash3;
+pub mod probminhash2;
+
 pub mod superminhasher;
 pub mod invhash;
 pub mod nohasher;
