@@ -11,8 +11,7 @@ pub mod exp01;
 pub mod weightedset;
 pub mod jaccard;
 
-pub mod probminhash3;
-pub mod probminhash2;
+pub mod probminhasher;
 
 pub mod superminhasher;
 pub mod invhash;
