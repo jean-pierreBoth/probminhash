@@ -1,4 +1,9 @@
 //! probminhash2 implementation
+//! Probminhash2 is statistically equivalent to P-Minhash as described in :
+//! Moulton Jiang "Maximally consistent sampling and the Jaccard index of probability distributions"
+//! 
+//! <https://ieeexplore.ieee.org/document/8637426> or <https://arxiv.org/abs/1809.04052>.  
+//! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 
 
 use log::{trace};

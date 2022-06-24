@@ -1,12 +1,8 @@
-//! Implementation of ProbMinHash2, ProbMinHash3 and ProbMinHash3a as described in O. Ertl  
+//! Implementation of ProbMinHash3 and ProbMinHash3a as described in O. Ertl  
 //! <https://arxiv.org/abs/1911.00675>
 //! * ProbminHash3a is the fastest but at the cost of some internal storage.
 //! * Probminhash3 is the same algorithm without the time optimization requiring more storage.  
 //!     It can be used in streaming
-//! * Probminhash2 is statistically equivalent to P-Minhash as described in :
-//! Moulton Jiang "Maximally consistent sampling and the Jaccard index of probability distributions"
-//! <https://ieeexplore.ieee.org/document/8637426> or <https://arxiv.org/abs/1809.04052>.  
-//! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //! 
 //! The generic type D must satisfy D:Copy+Eq+Hash+Debug  
 //! The algorithms requires random generators to be initialized by the objects so we need to map (at least approximately

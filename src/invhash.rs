@@ -1,4 +1,5 @@
-//! This module provides inversible hash in 32bit and 64 bits version
+//! This module provides inversible hash in 32 bit and 64 bits version.
+//! 
 //! It uses Thomas Wang's invertible integer hash functions.
 //! See <https://gist.github.com/lh3/59882d6b96166dfc3d8d> for a snapshot.
 

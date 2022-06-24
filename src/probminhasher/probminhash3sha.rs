@@ -1,16 +1,14 @@
 //! Implementation of ProbMinHash3a as described in O. Ertl  
 //! <https://arxiv.org/abs/1911.00675>
+//! 
 //! * ProbminHash3a is the fastest but at the cost of some internal storage.
-//!
+//! 
 //! Contrary to the module probminhash3a the hash is based on sha2 hash functions so 
 //! the generic type D must satisfy D:AsRef<[u8]> instead of Hash.  
 //! 
 //! The hash value is computed on 256 bits and the random generator an be initilized with a full 256 bits value
-//! reducing collisions. If this is not a constraint the Probminhash3 module is a solution
+//! reducing collisions. If this is not a requirement the Probminhash3 module is a solution.
 //!  
-//! The algorithms requires random generators to be initialized by the objects so we need to map (at least approximately
-//! injectively) objects into a u64 so the of objcts must satisfy Hash.
-//! If D is of type u64 it is possible to use a NoHasher (cd module nohasher)
 
 #[allow(unused_imports)]
 use log::{trace,debug};
@@ -35,15 +33,12 @@ use crate::exp01::*;
 
 
 
-/// implementation of the algorithm ProbMinHash3a as described in Etrl.  
+/// Another implementation of the algorithm ProbMinHash3a as described in Etrl.  
 /// 
-/// This version of ProbMinHash3a is faster but needs some more memory as it stores some states
-/// between 2 passes on data.
+/// This version of ProbMinHash3a is faster than ProbminHash3 but needs some more memory as it stores some states
+/// between 2 passes on data. Probminhash3aSha needs at least 2 hash values to run.  
 /// 
-/// Probminhash3a needs at least 2 hash values to run.
-/// D must be convertible (at least partially) injectively into a usize for random generator initialization hence the requirement D:Hash.  
-/// If all data are referred to by an unsigned integer, and weight association is given in a tuple for example if
-/// data comes in a Vec<(D,f64)> then D can be in fact replaced by the rank in the Vector, then no hash is need and you can use NoHasher
+/// Contrary to ProbMinHash3a the type D of counted objects must satisfay D:AsRef<\[u8\]>,
 pub struct ProbMinHash3aSha<D> 
             where D:Clone+Eq+Debug+AsRef<[u8]>,
             {

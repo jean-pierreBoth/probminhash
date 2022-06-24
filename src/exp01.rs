@@ -5,7 +5,7 @@ use rand::prelude::*;
 
 
 
-/// Structure for defining exponential sampling of parameter lambda with support restricted
+/// Structure implemneting exponential sampling of parameter lambda with support restricted
 /// to unit interval [0,1).  
 // All comments follow notations in Ertl article
 #[derive(Clone, Copy, Debug)]

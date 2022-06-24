@@ -3,8 +3,9 @@
 
 
 /// Computes the weighted jaccard index of 2 signatures.
+///   
 /// The 2 signatures must come from two equivalent instances of the same ProbMinHash algorithm
-/// with the same number of hash signatures. 
+/// with the same number of hash signatures.  
 /// Note that if *jp* is the returned value of this function,  
 /// the distance between siga and sigb, associated to the jaccard index is *1.- jp* 
 pub fn compute_probminhash_jaccard<D:Eq>(siga : &[D], sigb : &[D]) -> f64 {
