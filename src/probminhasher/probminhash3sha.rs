@@ -4,9 +4,10 @@
 //! * ProbminHash3a is the fastest but at the cost of some internal storage.
 //! 
 //! Contrary to the module probminhash3a the hash is based on sha2 hash functions so 
-//! the generic type D must satisfy D:AsRef<[u8]> instead of Hash.  
+//! the generic type D must satisfy the trait probminhash::probminhasher::sig::Sig
+//! which implies some cost but counted objects do not need the Copy trait 
 //! 
-//! The hash value is computed on 256 bits and the random generator an be initilized with a full 256 bits value
+//! The hash value is computed on 256 bits and the random generator is initilized with a full 256 bits value
 //! reducing collisions. If this is not a requirement the Probminhash3 module is a solution.
 //!  
 
@@ -28,7 +29,7 @@ use std::collections::HashMap;
 
 use crate::maxvaluetrack::*;
 use crate::exp01::*;
-
+use super::sig::Sig;
 
 
 
@@ -40,7 +41,7 @@ use crate::exp01::*;
 /// 
 /// Contrary to ProbMinHash3a the type D of counted objects must satisfay D:AsRef<\[u8\]>,
 pub struct ProbMinHash3aSha<D> 
-            where D:Clone+Eq+Debug+AsRef<[u8]>,
+            where D:Clone+Eq+Debug+Sig,
             {
     m : usize,
     /// field to keep track of max hashed values
@@ -56,7 +57,7 @@ pub struct ProbMinHash3aSha<D>
 
 
 impl <D> ProbMinHash3aSha<D> 
-        where D:Clone+Eq+Debug+AsRef<[u8]> {
+        where D:Clone+Eq+Debug+Sig {
 
     /// Allocates a new ProbMinHash3a structure with nbhash >= 2 functions and initial object initobj to fill signature.  
     /// The precision on the final estimation depends on the number of hash functions.   
@@ -92,13 +93,9 @@ impl <D> ProbMinHash3aSha<D>
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = Sha512_256::new();
             // write input message
-            hasher.update(key.as_ref());
+            hasher.update(&key.get_sig());
             // read hash digest and consume hasher
-        //    let new_hash :[u8;32];
             let new_hash = hasher.finalize();
-            // key.hash(&mut hasher);
-            // let new_hash : u64 = hasher.finish();
-//            let mut rng = Xoshiro256PlusPlus::seed_from_u64(new_hash);
             let hashed_slice = new_hash.as_slice();
             assert_eq!(hashed_slice.len() , 32);
             let mut seed : [u8;32] = [0; 32];
@@ -177,7 +174,7 @@ impl <D> ProbMinHash3aSha<D>
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = Sha512_256::new();
             // write input message
-            hasher.update(key.as_ref());
+            hasher.update(&key.get_sig());
             // read hash digest and consume hasher
             let new_hash = hasher.finalize();
             let hashed_slice = new_hash.as_slice();
@@ -349,7 +346,7 @@ fn test_probminhash3asha_count_intersection_unequal_weights() {
             jp += 1./den;
         }
     }
-    trace!("Jp = {} ",jp);
+    debug!("Jp = {} ",jp);
     //
 //    waprobhash.maxvaluetracker.dump();
 //    wbprobhash.maxvaluetracker.dump();
