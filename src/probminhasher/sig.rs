@@ -15,6 +15,44 @@ pub trait Sig {
     fn get_sig(&self) -> Vec<u8>;
 }
 
+impl Sig for u8 {
+    fn get_sig(&self) -> Vec<u8> {
+        return vec![*self];
+    }
+} // end of impl Sig for u8
+
+
+impl Sig for u16 {
+    fn get_sig(&self) -> Vec<u8> {
+        return Vec::from(self.to_ne_bytes()); 
+    }    
+} // end of impl Sig for u16
+
+impl Sig for u32 {
+    fn get_sig(&self) -> Vec<u8> {
+        return Vec::from(self.to_ne_bytes()); 
+    }    
+} // end of impl Sig for u32
+
+impl Sig for u64 {
+    fn get_sig(&self) -> Vec<u8> {
+        return Vec::from(self.to_ne_bytes()); 
+    }    
+} // end of impl Sig for u32
+
+impl Sig for i16 {
+    fn get_sig(&self) -> Vec<u8> {
+        return Vec::from(self.to_ne_bytes()); 
+    }    
+} // end of impl Sig for i16
+
+
+impl Sig for i32 {
+    fn get_sig(&self) -> Vec<u8> {
+        return Vec::from(self.to_ne_bytes()); 
+    }    
+} // end of impl Sig for i32
+
 
 impl Sig for Vec<u8>  {
     fn get_sig(&self) -> Vec<u8> {
@@ -34,6 +72,19 @@ impl Sig for Vec<u16>  {
         return s;
     }
 } // end of impl Sig for <Vec<u16>>
+
+
+impl Sig for Vec<u32>  {
+    fn get_sig(&self) -> Vec<u8> {
+        let mut c = self.clone();
+        let ptr = c.as_mut_ptr();
+        let new_len = c.len() * std::mem::size_of::<u32>();
+        let s = unsafe {
+            Vec::<u8>::from_raw_parts(ptr as * mut u8,  new_len, new_len)
+        };
+        return s;
+    }
+} // end of impl Sig for <Vec<u32>>
 
 
 impl Sig for String {

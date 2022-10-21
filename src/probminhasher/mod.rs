@@ -10,10 +10,10 @@
 //! It is given as a fallback in case ProbminHash3* algorithms do not perform well, or for comparison.
 //!  
 //!  
-//! A variation of probminhash3a is implemented in probminhash3a.  
+//! * ProbMinHash3aSha is a variation of probminhash3a dedicated to hashing of types not implementing Copy.  
 //! This implementation uses Sha512_256 hashing for initialization the random generator (Xoshiro256PlusPlus) with 256 bits seed and
 //! reduces the risk of collisions. 
-//! Counted objects must satisfy **AsRef<\[u8\]>** instead of **Hash** for the preceding algorithms, but they do not need to satisfy Copy.
+//! Counted objects must satisfy the trait **Sig** instead of **Hash** for the preceding algorithms, but they do not need to satisfy Copy.
 //! It is more adapted to hashing Strings or Vec<u8>  
 
 

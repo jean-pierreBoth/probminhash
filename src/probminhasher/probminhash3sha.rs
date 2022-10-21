@@ -1,14 +1,22 @@
 //! Implementation of ProbMinHash3a as described in O. Ertl  
 //! <https://arxiv.org/abs/1911.00675>
 //! 
-//! * ProbminHash3a is the fastest but at the cost of some internal storage.
+//! This module is similar to probminhash3a but dedicated to hashing some types that do not implement Copy!
 //! 
 //! Contrary to the module probminhash3a the hash is based on sha2 hash functions so 
 //! the generic type D must satisfy the trait probminhash::probminhasher::sig::Sig
 //! which implies some cost but counted objects do not need the Copy trait 
 //! 
 //! The hash value is computed on 256 bits and the random generator is initilized with a full 256 bits value
-//! reducing collisions. If this is not a requirement the Probminhash3 module is a solution.
+//! reducing collisions. 
+//! This implementation uses Sha512_256 hashing for initialization the random generator (Xoshiro256PlusPlus) with 256 bits seed and
+//! reduces the risk of collisions. 
+//! Counted objects must satisfy the trait Sig (instead of **Hash** for the preceding algorithms), 
+//! so that it can be fed into Sha update methods and thus do not need to satisfy Copy.
+//! 
+//! It is more adapted to hashing Strings or Vec<u8>  
+//! 
+//! If this is not a requirement the Probminhash3 module is a solution.
 //!  
 
 #[allow(unused_imports)]
