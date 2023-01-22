@@ -20,6 +20,7 @@
 pub mod probminhash2;
 pub mod probminhash3;
 pub mod probminhash3sha;
+pub mod probordminhash2;
 pub mod sig;
 
 pub use probminhash2::ProbMinHash2;
