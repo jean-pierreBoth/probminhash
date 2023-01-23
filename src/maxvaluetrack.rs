@@ -90,6 +90,13 @@ impl MaxValueTracker {
         self.values[slot]
     } // end of get_value
 
+    /// reset to max value f64::MAX
+    pub(crate) fn reset(&mut self) {
+        self.values.fill(f64::MAX);
+    }
+
+
+
     #[allow(dead_code)]
     pub fn dump(&self) {
         println!("\n\nMaxValueTracker dump : ");

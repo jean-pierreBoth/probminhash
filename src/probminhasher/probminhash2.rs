@@ -9,71 +9,17 @@
 use log::{trace};
 use std::fmt::{Debug};
 
-use rand::distributions::{Distribution,Uniform};
+use rand::distributions::{Distribution};
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand::prelude::*;
 use rand_distr::Exp1;
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
+use std::collections::HashMap;
 
+use crate::fyshuffle::*;
 use crate::maxvaluetrack::*;
 use crate::weightedset::*;
-
-/// Fisher Yates random permutation generation (sampling without replacement), with lazy generation
-/// of an array of size n
-pub struct FYshuffle {
-    m: usize,
-    /// uniform distribution on [0,1)
-    unif_01 : Uniform<f64>,
-    ///
-    v : Vec<usize>,
-    ///
-    lastidx : usize,
-}
-
-impl FYshuffle {
-    /// initialize a random permutation generator on a set of size m
-    pub fn new(m: usize) -> FYshuffle {
-        let v : Vec<usize> = (0..m).map(|x| x).collect();
-        FYshuffle{m:m, unif_01: Uniform::<f64>::new(0., 1.), v : v, lastidx:m}
-    }
-
-    // See https://www.geeksforgeeks.org/generate-a-random-permutation-of-1-to-n/
-    // and The algorithm design manual S.Skiena P.458
-
-    /// generates next randomly choosen item of the set (you get sampling without replacement)
-    /// After being call m times, it is possible to get the full permutation with the function get_values
-    /// as the permutation is fully sampled.
-    /// If called more than m times, it calls reset implicitly to generate a new permutation.
-    /// It is possible (and recommended) to reset explicitly after m successive call to next method
-    pub fn next(&mut self, rng : &mut Xoshiro256PlusPlus) -> usize {
-        if self.lastidx >= self.m {
-            self.reset();
-        }
-        let xsi = self.unif_01.sample(rng);
-        // sample between self.lastidx (included) and self.m (excluded)
-        let idx = self.lastidx + (xsi * (self.m - self.lastidx) as f64) as usize;
-        let val = self.v[idx];
-        self.v[idx] = self.v[self.lastidx];
-        self.v[self.lastidx] = val;
-        self.lastidx += 1;
-        val
-    }
-
-    pub fn reset(&mut self) {
-        trace!("resetting shuffle lastidx = {}", self.lastidx);
-        self.lastidx = 0;
-        for i in 0..self.m {
-            self.v[i] = i;
-        }
-    }
-
-    /// returns the set of permuted index
-    pub fn get_values(&self) -> &Vec<usize> {
-        &self.v
-    }
-
-}  // end of impl FYshuffle
 
 
 
@@ -121,7 +67,7 @@ impl <D,H> ProbMinHash2<D,H>
     /// Incrementally adds an item in hash signature. It can be used in streaming.  
     /// It is the building block of the computation, but this method 
     /// does not check for unicity of id added in hash computation.  
-    /// It is user responsability to enforce that. See method hash_wset
+    /// It is user responsability to enforce that. See method hash_weigthed_hashmap or hash_wset
     pub fn hash_item(&mut self, id:D, weight:f64) {
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
@@ -161,6 +107,21 @@ impl <D,H> ProbMinHash2<D,H>
             self.hash_item(*obj, weight);
         }
     } // end of hash method
+
+
+    /// computes set signature when set is given as an HashMap with weights corresponding to values.(equivalent to the method with and IndexMap)
+    /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
+    /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
+    pub fn hash_weigthed_hashmap<Hidx>(&mut self, data: &HashMap<D, f64>) {
+        let mut iter = data.iter();
+        while let Some((key, weight)) = iter.next() {
+            trace!(" retrieved key {:?} ", key);  
+            // we got weight as something convertible to f64
+            self.hash_item(*key, *weight);
+        }
+    }  // end of hash_weigthed_hashmap
+
+
 
     /// return final signature.
     pub fn get_signature(&self) -> &Vec<D> {

@@ -8,6 +8,7 @@ extern crate lazy_static;
 mod maxvaluetrack;
 
 pub mod exp01;
+pub mod fyshuffle;
 pub mod weightedset;
 pub mod jaccard;
 
