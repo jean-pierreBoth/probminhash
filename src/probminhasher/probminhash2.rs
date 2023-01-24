@@ -33,6 +33,8 @@ use crate::weightedset::*;
 pub struct ProbMinHash2<D,H> 
             where D:Copy+Eq+Hash+Debug,H:Hasher+Default    {
     m : usize,
+    /// initialization object
+    initobj : D,
     ///
     b_hasher : BuildHasherDefault<H>,
     /// field to keep track of max hashed values
@@ -56,6 +58,7 @@ impl <D,H> ProbMinHash2<D,H>
         let h_signature = (0..nbhash).map( |_| initobj).collect();
         let betas : Vec<f64> = (0..nbhash).map(| x | (nbhash as f64)/ (nbhash - x - 1) as f64).collect();
         ProbMinHash2{ m:nbhash, 
+                    initobj : initobj,
                     b_hasher :  BuildHasherDefault::<H>::default(),
                     maxvaluetracker: MaxValueTracker::new(nbhash as usize), 
                     permut_generator : FYshuffle::new(nbhash),
@@ -127,6 +130,15 @@ impl <D,H> ProbMinHash2<D,H>
     pub fn get_signature(&self) -> &Vec<D> {
         return &self.signature;
     }
+
+    ///
+    pub fn reset(&mut self) {
+        self.signature.fill(self.initobj);
+        self.maxvaluetracker.reset();
+        self.permut_generator.reset();
+    } // end of reset
+
+
 }  // end of implementation block for ProbMinHash2
 
 

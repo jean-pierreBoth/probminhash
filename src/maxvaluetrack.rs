@@ -77,7 +77,16 @@ impl MaxValueTracker {
     pub fn get_max_value(&self) -> f64 {
         return self.values[self.last_index]
     }
-
+    
+    // returns true if a value can be inserted, false it is too high
+    pub fn is_update_possible(&self, value : f64) -> bool {
+        if value < self.values[self.last_index] {
+            true
+        }
+        else {
+            false
+        }
+    } // end of is_update_possible
 
     #[allow(dead_code)]
     pub(crate) fn get_parent_slot(&self, slot : usize) -> usize {
