@@ -78,7 +78,7 @@ impl<V> OrdMinHashStore<V>
         let ml = m*l;
         let indices = Vec::<u64>::with_capacity(ml);
         let values = Vec::<V>::with_capacity(m);
-        let hashbuffer = Vec::<u64>::with_capacity(l);
+        let hashbuffer = (0..l).into_iter().map(|_| 0).collect();
         //
         assert!(l < 16);
         OrdMinHashStore{m, l, ml, indices, values, hashbuffer}
@@ -118,9 +118,24 @@ impl<V> OrdMinHashStore<V>
     }
 
     // The final job
-    pub(crate) fn update_signature<D:Hash>(&mut self, data : &[D]) {
+    pub(crate) fn update_signature<D:Hash, H : Hasher+Default>(&mut self, data : &[D]) {
+        //
+        let b_hasher = BuildHasherDefault::<H>::default();
+        let mut hasher = b_hasher.build_hasher();
+        //
+        for i in 0..self.m {
+            let start = i * self.l;
+            let end = start + self.l;
+            self.indices[start..end].sort_unstable();
+            // fill self.hashbuffer
+            for j in 0..self.l {
+                data[start+j].hash(&mut hasher);
+                self.hashbuffer[j] = hasher.finish();
+            }
+            // combine hash values
+        }
         std::panic!("not yet");
-    }
+    } // end of update_signature
 
 
 } // end of impl OrdMinHashStore
@@ -132,7 +147,7 @@ impl<V> OrdMinHashStore<V>
 
 /// The equivalent of FastOrderMinHash2 in Ertl's ProbMinHash implementation
 pub struct ProbOrdMinHasher2<H> {
-    m : u32,
+    m : usize,
     ///
     b_hasher: BuildHasherDefault<H>,
     //
@@ -153,8 +168,9 @@ pub struct ProbOrdMinHasher2<H> {
 impl <H> ProbOrdMinHasher2<H> 
         where H : Hasher+Default {
     //
-    pub fn new(m : usize, l : usize) -> Self {
+    pub fn new(m_s : u32, l : usize) -> Self {
 
+        let m = m_s as usize;
         let max_tracker = MaxValueTracker::new(m);
         let minstore = OrdMinHashStore::<f64>::new(m,l);
         let permut_generator = FYshuffle::new(m);
@@ -164,9 +180,10 @@ impl <H> ProbOrdMinHasher2<H>
             g[i - 1] = m as f64 / (m - i) as f64;
         }
         //
-        let counter = HashMap::<u64, usize>::new();
+        let counter = HashMap::<u64, u64>::new();
         //
-        std::panic!("not yet");
+        ProbOrdMinHasher2{m, b_hasher : BuildHasherDefault::<H>::default(), max_tracker, min_store : minstore, g , 
+                permut_generator : FYshuffle::new(m), counter}
     } // end new
 
 
@@ -229,7 +246,8 @@ impl <H> ProbOrdMinHasher2<H>
             } 
         }
         // we can update signature
-        return self.min_store.update_signature(data);
+        let mut hasher = self.b_hasher.build_hasher();
+        return self.min_store.update_signature::<D,H>(data);
     } // end of hash_set
 
 }  // end of impl ProbOrdMinHasher2
