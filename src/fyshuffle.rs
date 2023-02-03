@@ -22,7 +22,7 @@ impl FYshuffle {
     /// initialize a random permutation generator on a set of size m
     pub fn new(m: usize) -> FYshuffle {
         let v : Vec<usize> = (0..m).map(|x| x).collect();
-        FYshuffle{m:m, unif_01: Uniform::<f64>::new(0., 1.), v : v, lastidx:m}
+        FYshuffle{m, unif_01: Uniform::<f64>::new(0., 1.), v, lastidx:m}
     }
 
     // See https://www.geeksforgeeks.org/generate-a-random-permutation-of-1-to-n/
@@ -36,6 +36,7 @@ impl FYshuffle {
     pub fn next(&mut self, rng : &mut Xoshiro256PlusPlus) -> usize {
         if self.lastidx >= self.m {
             self.reset();
+            log::debug!("FYshuffle next calling reset ");
         }
         let xsi = self.unif_01.sample(rng);
         // sample between self.lastidx (included) and self.m (excluded)

@@ -9,7 +9,7 @@
 //! This is a Rust reimplementation  Ertl.O code
 //! 
 
-#![allow(unused)]
+//#![allow(unused)]
 
 
 use std::hash::{Hash, Hasher, BuildHasher, BuildHasherDefault};
@@ -19,6 +19,8 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use rand_distr::Exp1;
+
+use wyhash::WyHash;
 
 use crate::fyshuffle::FYshuffle;
 use crate::maxvaluetrack::MaxValueTracker;
@@ -58,8 +60,6 @@ struct OrdMinHashStore<V>
     m : usize,
     // number of minimal (value, occurence) we keep
     l : usize,
-    //
-    ml : usize,
     // indices[i] stores the index of data item
     indices : Vec<u64>,
     // values encountered in the data
@@ -76,23 +76,25 @@ impl<V> OrdMinHashStore<V>
     /// m is the number of hash values used, l size of minimum permutation associated values stored.
     pub fn new(m : usize, l : usize) -> Self {
         let ml = m*l;
-        let indices = Vec::<u64>::with_capacity(ml);
-        let values = Vec::<V>::with_capacity(m);
+        // iniitalize indices with max so there can be no_confusion with a data index
+        let indices = (0..ml).into_iter().map(|_| u64::MAX).collect::<Vec::<u64>>();
+        let values = (0..ml).into_iter().map(|_| V::get_max()).collect::<Vec::<V>>();
         let hashbuffer = (0..l).into_iter().map(|_| 0).collect();
         //
         assert!(l < 16);
-        OrdMinHashStore{m, l, ml, indices, values, hashbuffer}
+        OrdMinHashStore{m, l, indices, values, hashbuffer}
     } // end of new
 
 
     // returns true if value could be inserted, false otherwise
-    pub(crate) fn update(&mut self, hash_idx : usize, value: &V, data_idx : usize) -> bool {
-        let first_idx : usize = hash_idx * self.l;
+    pub(crate) fn update(&mut self, pos: usize, value: &V, data_idx : usize) -> bool {
+        assert!(pos < self.m);
+        let first_idx : usize = pos * self.l;
         let last_idx : usize = first_idx + self.l - 1;
         // if value is above the highest we have nothing to do, else we insert it at the right place
         if *value < self.values[last_idx] {
             let mut array_idx = last_idx;
-            while(array_idx > first_idx && *value < self.values[array_idx - 1]) {
+            while array_idx > first_idx && *value < self.values[array_idx - 1] {
                 self.values[array_idx] = self.values[array_idx - 1];
                 self.indices[array_idx] = self.indices[array_idx - 1];
                 array_idx -= 1;
@@ -108,8 +110,9 @@ impl<V> OrdMinHashStore<V>
 
 
 
-    pub(crate) fn reset_values(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.values.fill(V::get_max());
+        self.indices.fill(u64::MAX);
     }
 
     /// return l (which is also the minimum data size to hash 
@@ -118,10 +121,15 @@ impl<V> OrdMinHashStore<V>
     }
 
     // The final job
-    pub(crate) fn update_signature<D:Hash, H : Hasher+Default>(&mut self, data : &[D]) {
+    pub(crate) fn create_signature<D:Hash, H : Hasher+Default>(&mut self, data : &[D]) -> Vec<u64> {
+        //
+        let mut result = Vec::<u64>::with_capacity(self.m);
         //
         let b_hasher = BuildHasherDefault::<H>::default();
         let mut hasher = b_hasher.build_hasher();
+        // We use wyrand as Ertl. 
+        // TODO make generic over this hasher
+        let mut combine_hasher = WyHash::with_seed(0xde10c59a9218c94a);
         //
         for i in 0..self.m {
             let start = i * self.l;
@@ -131,10 +139,13 @@ impl<V> OrdMinHashStore<V>
             for j in 0..self.l {
                 data[start+j].hash(&mut hasher);
                 self.hashbuffer[j] = hasher.finish();
+                combine_hasher.write_u64(self.hashbuffer[j]);
             }
             // combine hash values
+            result.push(combine_hasher.finish());
+            // TODO to make generic over combiner?
         }
-        std::panic!("not yet");
+        return result;
     } // end of update_signature
 
 
@@ -146,7 +157,7 @@ impl<V> OrdMinHashStore<V>
 
 
 /// The equivalent of FastOrderMinHash2 in Ertl's ProbMinHash implementation
-pub struct ProbOrdMinHasher2<H> {
+pub struct ProbOrdMinHash2<H> {
     m : usize,
     ///
     b_hasher: BuildHasherDefault<H>,
@@ -160,12 +171,12 @@ pub struct ProbOrdMinHasher2<H> {
     permut_generator : FYshuffle,
     // object counter
     counter : HashMap<u64, u64>,
-} // end of ProbOrdMinHasher2
+} // end of ProbOrdMinHash2
 
 
 
 
-impl <H> ProbOrdMinHasher2<H> 
+impl <H> ProbOrdMinHash2<H> 
         where H : Hasher+Default {
     //
     pub fn new(m_s : u32, l : usize) -> Self {
@@ -173,22 +184,21 @@ impl <H> ProbOrdMinHasher2<H>
         let m = m_s as usize;
         let max_tracker = MaxValueTracker::new(m);
         let minstore = OrdMinHashStore::<f64>::new(m,l);
-        let permut_generator = FYshuffle::new(m);
         //
-        let mut g = Vec::<f64>::with_capacity(m-1);
+        let mut g = (0..(m-1)).into_iter().map(|_| 0.).collect::<Vec<f64>>();
         for i in 1..m {
             g[i - 1] = m as f64 / (m - i) as f64;
         }
         //
         let counter = HashMap::<u64, u64>::new();
         //
-        ProbOrdMinHasher2{m, b_hasher : BuildHasherDefault::<H>::default(), max_tracker, min_store : minstore, g , 
+        ProbOrdMinHash2{m, b_hasher : BuildHasherDefault::<H>::default(), max_tracker, min_store : minstore, g , 
                 permut_generator : FYshuffle::new(m), counter}
     } // end new
 
 
-    /// hash a full batch of data
-    pub fn hash_set<D:Eq+Hash>(&mut self, data : &[D]) {
+    /// hash a full batch of data. All internal data are cleared at each new call
+    pub fn hash_set<D:Eq+Hash>(&mut self, data : &[D]) -> Vec<u64> {
         // check size
         let size = data.len();
         if size < self.min_store.get_l() {
@@ -197,7 +207,7 @@ impl <H> ProbOrdMinHasher2<H>
         }
         // reset to a clean state
         self.counter.clear();
-        self.min_store.reset_values();
+        self.min_store.reset();
         self.max_tracker.reset();
         // now we can work  
         let mut x : f64;
@@ -227,10 +237,14 @@ impl <H> ProbOrdMinHasher2<H>
             let mut rng = Xoshiro256PlusPlus::from_seed(seed_256);
             x = Exp1.sample(&mut rng);
             let mut nb_inserted = 0;
-            let mut qmax = self.max_tracker.get_max_value();
+            let qmax = self.max_tracker.get_max_value();
             while x < qmax {
                 let k = self.permut_generator.next(&mut rng);
+                assert!(k < self.m);
                 let inserted = self.min_store.update(k, &x, i);
+                if !inserted {
+                    break;
+                }
                 // x is growing, so even if last update was possible, if no update possible after preceding update, we can stop
                 if !self.max_tracker.is_update_possible(x) {
                     break;
@@ -240,14 +254,72 @@ impl <H> ProbOrdMinHasher2<H>
                     break;
                 }
                 let y : f64 = Exp1.sample(&mut rng);
-                x = x + y * self.g[i];
+                x = x + y * self.g[nb_inserted];
                 //
                 nb_inserted += 1;
             } 
         }
         // we can update signature
-        let mut hasher = self.b_hasher.build_hasher();
-        return self.min_store.update_signature::<D,H>(data);
+        return self.min_store.create_signature::<D,H>(data);
     } // end of hash_set
 
-}  // end of impl ProbOrdMinHasher2
+}  // end of impl ProbOrdMinHash2
+
+
+//============================================================================
+
+#[cfg(test)]
+mod tests {
+
+
+use super::*;
+use fnv::{FnvHasher};
+
+
+fn log_init_test() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
+
+// 
+#[allow(unused)]
+fn test_vectors(m : u32, l : usize, v1 : &[u64], v2 : &[u64], nb_iter : usize) {
+    let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m,l);
+    //
+    let hash1 = pordminhash.hash_set(&v1);
+    let hash2 = pordminhash.hash_set(&v2);
+} // end of test_vectors
+
+
+
+
+#[test] 
+fn ordminhash2_random_data() {
+    //
+    log_init_test();
+    log::info!("in test_ordminhash2_random_data");
+    //
+    let mut rng = rand::thread_rng();
+    let data_size = 50000;
+    let data = (0..data_size).into_iter().map(|_| rng.next_u64()).collect::<Vec<u64>>();
+
+    let m_s : u32 = 500;
+    let l = 3;
+    let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m_s,l);
+    //
+    let _hash = pordminhash.hash_set(&data);
+
+} // end of test_ordminhash2_random_data
+
+
+#[test]
+// test pattern comparisons
+fn test_ordminhash2_dist_1() {
+    //
+    log_init_test();
+} // end of test_ordminhash2_dist_1
+
+
+
+} // end of mod tests
+

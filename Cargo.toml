@@ -37,6 +37,7 @@ rand_distr = {version = "0.4"}
 rand_xorshift = {version = "0.3"}
 rand_xoshiro = {version = "0.6"}
 sha2 = {version = "0.10"}
+wyhash = {version = "0.5"}
 
 fxhash = { version= "0.2"}
 indexmap = { version = "1.8"}
