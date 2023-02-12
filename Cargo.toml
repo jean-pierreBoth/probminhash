@@ -45,6 +45,8 @@ fnv = {version= "1.0"}
 
 lazy_static = { version = "1.4"}
 
+
+
 # decreasing order of log for debug build : (max_level_)trace debug info warn error off
 # decreasing order of log for release build (release_max_level_)  .. idem
 #log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }

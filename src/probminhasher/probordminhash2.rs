@@ -60,9 +60,9 @@ struct OrdMinHashStore<V>
     m : usize,
     // number of minimal (value, occurence) we keep
     l : usize,
-    // indices[i] stores the index of data item
+    // allocated to m*l. indices[i] stores the index of data item
     indices : Vec<u64>,
-    // values encountered in the data
+    // m * l minimal hashed values generted from the data
     values : Vec<V>,
     // hashed 
     hashbuffer : Vec<u64>
@@ -87,10 +87,15 @@ impl<V> OrdMinHashStore<V>
 
 
     // returns true if value could be inserted, false otherwise
-    pub(crate) fn update(&mut self, pos: usize, value: &V, data_idx : usize) -> bool {
-        assert!(pos < self.m);
-        let first_idx : usize = pos * self.l;
+    // value is hashed value of data at index idx, coming from Probordminhash2
+    // we insert value and data_idx in sorted arrays values and indices
+    pub(crate) fn update(&mut self, permuted_idx: usize, value: &V, data_idx : usize) -> bool {
+        assert!(permuted_idx < self.m);
+        let first_idx : usize = permuted_idx * self.l;
         let last_idx : usize = first_idx + self.l - 1;
+        log::debug!("OrdMinHashStore::update permut idx : {}", permuted_idx);
+        log::debug!("indices : {:?}", self.indices);
+        log::trace!("values : {:?}", self.values);
         // if value is above the highest we have nothing to do, else we insert it at the right place
         if *value < self.values[last_idx] {
             let mut array_idx = last_idx;
@@ -101,6 +106,7 @@ impl<V> OrdMinHashStore<V>
             }
             self.values[array_idx] = *value;
             self.indices[array_idx] = data_idx as u64;
+            log::debug!("exiting update indices : {:?}", self.indices);
             return true;
         }
         else {
@@ -123,21 +129,24 @@ impl<V> OrdMinHashStore<V>
     // The final job
     pub(crate) fn create_signature<D:Hash, H : Hasher+Default>(&mut self, data : &[D]) -> Vec<u64> {
         //
+        assert!(data.len() >= self.l , "data length must be greater than l");
+        //
         let mut result = Vec::<u64>::with_capacity(self.m);
         //
         let b_hasher = BuildHasherDefault::<H>::default();
         let mut hasher = b_hasher.build_hasher();
         // We use wyrand as Ertl. 
         // TODO make generic over this hasher
-        let mut combine_hasher = WyHash::with_seed(0xde10c59a9218c94a);
         //
         for i in 0..self.m {
+            let mut combine_hasher = WyHash::with_seed(0xde10c59a9218c94a);
             let start = i * self.l;
             let end = start + self.l;
             self.indices[start..end].sort_unstable();
             // fill self.hashbuffer
             for j in 0..self.l {
-                data[start+j].hash(&mut hasher);
+                let data_idx = usize::try_from(self.indices[start+j]).unwrap();
+                data[data_idx].hash(&mut hasher);
                 self.hashbuffer[j] = hasher.finish();
                 combine_hasher.write_u64(self.hashbuffer[j]);
             }
@@ -157,6 +166,7 @@ impl<V> OrdMinHashStore<V>
 
 
 /// The equivalent of FastOrderMinHash2 in Ertl's ProbMinHash implementation
+/// data length must be greater than l
 pub struct ProbOrdMinHash2<H> {
     m : usize,
     ///
@@ -212,8 +222,7 @@ impl <H> ProbOrdMinHash2<H>
         // now we can work  
         let mut x : f64;
         for i in 0..size {
-            self.permut_generator.reset();  // TODO ?
-
+            self.permut_generator.reset();
             // hash data value to usize
             let mut hasher = self.b_hasher.build_hasher();
             data[i].hash(&mut hasher);
@@ -245,7 +254,12 @@ impl <H> ProbOrdMinHash2<H>
                 if !inserted {
                     break;
                 }
-                // x is growing, so even if last update was possible, if no update possible after preceding update, we can stop
+                else {
+                    // we update max value tracker with value at pos
+                    self.max_tracker.update(k, x);
+                }
+                // x is growing, so even if last update was possible at slot k, it is possible another value of x
+                // cannot be inserted (if k was last possible index), if no update possible after preceding update, we can exit
                 if !self.max_tracker.is_update_possible(x) {
                     break;
                 }
@@ -272,6 +286,7 @@ impl <H> ProbOrdMinHash2<H>
 mod tests {
 
 
+
 use super::*;
 use fnv::{FnvHasher};
 
@@ -281,16 +296,64 @@ fn log_init_test() {
 }
 
 
+// generate 2 sequence of length n 
+// The first one has k 0 then 1, the other has n-k 0 and then 1
+// edit similarity is 2*k/n weighted jaccard is 1/(n-k)
+fn gen_01seq(k : usize, n : usize) -> (Vec<u32>, Vec<u32>) {
+    //
+    assert!(k < n);
+    //
+    let vec1 = (0..n).into_iter().map(|i| if i < n-k {0} else {1}).collect::<Vec<u32>>();
+    let vec2 = (0..n).into_iter().map(|i| if i < k {0} else {1}).collect::<Vec<u32>>();
+    //
+    (vec1, vec2)
+}  // end of gen_01seq
+
+
+
 // 
-#[allow(unused)]
-fn test_vectors(m : u32, l : usize, v1 : &[u64], v2 : &[u64], nb_iter : usize) {
+fn test_vectors(m : u32, l : usize, v1 : &[u32], v2 : &[u32], nb_iter : usize) {
     let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m,l);
     //
-    let hash1 = pordminhash.hash_set(&v1);
-    let hash2 = pordminhash.hash_set(&v2);
+    // get histo results
+    let mut equals = (0..m+1).into_iter().map(|_| 0).collect::<Vec<usize>>();
+    //
+    for _ in 0..nb_iter {
+        let hash1 = pordminhash.hash_set(&v1);
+        let hash2 = pordminhash.hash_set(&v2);
+        let mut  nb_equal : u32 = 0;
+        for i in 0..m as usize {
+            if hash1[i] == hash2[i] {
+                nb_equal = nb_equal + 1;
+            }
+        }
+        equals[nb_equal as usize] += 1;
+    }
+    //
+    log::info!(" equalities at m slots : {:?}", equals);
 } // end of test_vectors
 
 
+fn get_pattern_2() -> (Vec<u32>, Vec<u32>) {
+    let v1: Vec<u32> = vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 2, 4, 5];
+    let v2: Vec<u32> = vec![0, 1, 2, 6, 4, 0, 7, 1, 2, 3, 2, 4, 5];
+    //
+    return (v1,v2)
+} 
+
+
+
+
+#[test]
+fn test_ordminhash_01seq() {
+    log_init_test();
+    //
+    log::info!("in test_ordminhash_01seq");
+    //
+    let (v1, v2) =  gen_01seq(3, 10);
+
+    test_vectors(1024, 3, &v1, &v2, 1000);
+}
 
 
 #[test] 
@@ -312,14 +375,59 @@ fn ordminhash2_random_data() {
 } // end of test_ordminhash2_random_data
 
 
+
+
+
+
 #[test]
 // test pattern comparisons
-fn test_ordminhash2_dist_1() {
+fn test_ordminhash2_p1() {
     //
     log_init_test();
-} // end of test_ordminhash2_dist_1
+    log::info!("in test_ordminhash2_1");
+    //
+    let m_s : u32 = 10;
+    let l = 2;
+    let nb_iter = 1;
+    //
+    test_vectors(m_s, l , &[0, 0, 1, 2, 2 , 3, 4], &[0, 0, 2, 3, 7,7], nb_iter);
+} // end of test_ordminhash2_p1
 
 
 
-} // end of mod tests
+#[test]
+fn test_ordminhash2_p2() {
+    log_init_test();
+    log::info!("in test_ordminhash2_p2");
+    let pattern = get_pattern_2();
+    //
+    let nb_iter = 1;
+    test_vectors(32, 5, &pattern.0, &pattern.1, nb_iter);
+} // end of test_ordminhash2_p2
 
+
+
+/* 
+Results from Ertl
+OrderMinHash       : 10016 31147 36342 18855 3640
+FastOrderMinHash1  : 9925  31121 36210 19020 3724
+FastOrderMinHash1a : 9925  31121 36210 19020 3724
+FastOrderMinHash2  : 10134 30893 36461 18797 3715
+
+*/
+#[test]
+fn test_ordminhash2_dist_p5() {
+    //
+    log_init_test();
+    log::info!("in test_ordminhash2_dist_5");
+    //
+    let size: usize = 25;
+    let v1 = (0..size).into_iter().map(|i| i as u32).collect::<Vec<u32>>();
+    let v2 = (0..size).into_iter().map(|i| (i + 5) as u32).collect::<Vec<u32>>();
+
+    let nbiter = 100000;
+    test_vectors(4, 2, &v1, &v2, nbiter);
+
+} // end of test_ordminhash2_dist_p5
+
+}

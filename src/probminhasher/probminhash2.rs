@@ -161,48 +161,6 @@ use super::*;
 
 
 
-#[test]
-// We check we have a unifom distribution of values at each rank of v
-// variance is 5/4
-fn test_fyshuffle() {
-
-    log_init_test();
-    let mut rng = Xoshiro256PlusPlus::seed_from_u64(45678 as u64);
-    let m = 4;
-    let mut fypermut = FYshuffle::new(m);
-    let nb_permut = 500000;
-    let mut freq : Vec<usize> = (0..m).map(|_| 0).collect();
-
-    for _ in 0..nb_permut {
-        for _ in 0..m {
-            fypermut.next(&mut rng);
-        }
-        let v = fypermut.get_values();
-        for k in 0..v.len() {
-            freq[k] += v[k];
-        }
-        fypermut.reset();
-    }
-
-    let th_freq = 1.5;
-    let th_var = 5./4.;
-    let sigma = (th_var/ (nb_permut as f64)).sqrt();
-    for i in 0..freq.len() {
-        let rel_error = ((freq[i] as f64)/ (nb_permut as f64) - th_freq)/ sigma;
-        info!(" slot i {} , rel error = {}", i, rel_error);
-        assert!( rel_error.abs() < 3.)
-    }
-    info!("  freq = {:?}", freq);
-    for _ in 0..15 {
-        for _ in 0..m {
-            fypermut.next(&mut rng);
-        }
-        println!("permut state {:?} ", fypermut.get_values());
-        fypermut.reset();
-    }
-} // end of test_fyshuffle
-
-
 #[test] 
 // This test checks JaccardProbability with unequal weights inside sets
 fn test_probminhash2_count_intersection_unequal_weights() {

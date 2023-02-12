@@ -33,7 +33,7 @@ impl MaxValueTracker {
     // sibling ok k is k+1 if k even, k-1 else so it is given by bitxor(k,1)
     pub(crate) fn update(&mut self, k:usize, value:f64) {
         assert!(k < self.m);
-        trace!("\n max value tracker update k, value , value at k {} {} {} ", k, value, self.values[k]);
+        trace!("\n max value tracker update k, value , value at k {} {} {:?} ", k, value, self.values[k]);
         let mut current_value = value;
         let mut current_k = k;
         let mut more = false;
@@ -56,14 +56,14 @@ impl MaxValueTracker {
                 break;     // means parent current and sibling are equals no more propagation needed
             }
             // now either self.values[siblidx] <self.values[pidx] or current_value < self.values[pidx]
-            trace!("propagating current_value {} sibling  {} ? ", current_value, self.values[siblidx]);
+            trace!("propagating current_value {} sibling  {:?} ? ", current_value, self.values[siblidx]);
             //
             if current_value < self.values[siblidx] {
-                trace!("     propagating sibling value {} to parent {}", self.values[siblidx], pidx);
+                trace!("     propagating sibling value {:?} to parent {}", self.values[siblidx], pidx);
                 current_value = self.values[siblidx];
             }
             else {
-                trace!("     propagating current_value {} to parent {}", current_value, pidx);   
+                trace!("     propagating current_value {:?} to parent {}", current_value, pidx);   
             }
             current_k = pidx;
             if current_value >= self.values[current_k]  {
@@ -106,7 +106,7 @@ impl MaxValueTracker {
 
 
 
-    #[allow(dead_code)]
+    #[allow(unused)]
     pub fn dump(&self) {
         println!("\n\nMaxValueTracker dump : ");
         for i in 0..self.values.len() {
