@@ -38,7 +38,7 @@ pub struct ProbMinHash2<D,H>
     ///
     b_hasher : BuildHasherDefault<H>,
     /// field to keep track of max hashed values
-    maxvaluetracker : MaxValueTracker,
+    maxvaluetracker : MaxValueTracker<f64>,
     /// random permutation generator
     permut_generator : FYshuffle,
     ///

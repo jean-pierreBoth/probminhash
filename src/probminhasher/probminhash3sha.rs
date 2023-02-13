@@ -53,7 +53,7 @@ pub struct ProbMinHash3aSha<D>
             {
     m : usize,
     /// field to keep track of max hashed values
-    maxvaluetracker : MaxValueTracker,
+    maxvaluetracker : MaxValueTracker<f64>,
     /// a exponential law restricted to interval [0., 1)
     exp01 : ExpRestricted01,
     /// Buffer to store object to be processed in second pass. Stores (object, inverse weight, generator)

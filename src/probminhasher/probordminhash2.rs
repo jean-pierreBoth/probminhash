@@ -17,45 +17,20 @@ use std::fmt::Debug;
 use std::collections::HashMap;
 
 use rand::prelude::*;
-use rand_xoshiro::Xoshiro256PlusPlus;
+use rand_xoshiro::{Xoshiro256PlusPlus, Xoshiro128PlusPlus};
 use rand_distr::Exp1;
 
 use wyhash::WyHash;
 
 use crate::fyshuffle::FYshuffle;
-use crate::maxvaluetrack::MaxValueTracker;
 
-/// A value for which there is a (natural) maximal value
-pub trait MaxValue<V : PartialOrd> {
-    //
-    fn get_max() -> V;
-} // end of trait Max
-
-
-macro_rules! implement_maxvalue_for(
-    ($ty:ty) => (
-        impl MaxValue<$ty> for $ty {
-            fn get_max() -> $ty {
-                <$ty>::MAX
-            }            
-        }
-    ) // end impl for ty
-);
-
-
-implement_maxvalue_for!(f64);
-implement_maxvalue_for!(f32);
-implement_maxvalue_for!(u32);
-implement_maxvalue_for!(u16);
-implement_maxvalue_for!(i32);
-implement_maxvalue_for!(u64);
-implement_maxvalue_for!(usize);
+use crate::maxvaluetrack::{MaxValue, MaxValueTracker};
 
 
 
 // This struct data to hash and permutation sorted l minimal values for each of the m hashed value
 struct OrdMinHashStore<V> 
-    where   V : MaxValue<V> + Copy + PartialOrd + Debug  {
+    where   V : MaxValue + Copy + PartialOrd + Debug  {
     // number of hash values per item
     m : usize,
     // number of minimal (value, occurence) we keep
@@ -71,7 +46,7 @@ struct OrdMinHashStore<V>
 
 
 impl<V> OrdMinHashStore<V> 
-    where   V : MaxValue<V> + Copy + PartialOrd + Debug {
+    where   V : MaxValue + Copy + PartialOrd + Debug {
 
     /// m is the number of hash values used, l size of minimum permutation associated values stored.
     pub fn new(m : usize, l : usize) -> Self {
@@ -89,12 +64,13 @@ impl<V> OrdMinHashStore<V>
     // returns true if value could be inserted, false otherwise
     // value is hashed value of data at index idx, coming from Probordminhash2
     // we insert value and data_idx in sorted arrays values and indices
-    pub(crate) fn update(&mut self, permuted_idx: usize, value: &V, data_idx : usize) -> bool {
+    // after l values for a given permuted_idx all indices in self.indices[l*permuted_idx..permuted_idx*(l+1)[are finite!!
+    pub(crate) fn update_with_maxtracker(&mut self, permuted_idx: usize, value: &V, data_idx : usize, maxtracker : &mut MaxValueTracker<V>) -> bool {
         assert!(permuted_idx < self.m);
         let first_idx : usize = permuted_idx * self.l;
         let last_idx : usize = first_idx + self.l - 1;
-        log::debug!("OrdMinHashStore::update permut idx : {}", permuted_idx);
-        log::debug!("indices : {:?}", self.indices);
+        log::trace!("OrdMinHashStore::update permut idx : {}", permuted_idx);
+        log::trace!("indices : {:?}", self.indices);
         log::trace!("values : {:?}", self.values);
         // if value is above the highest we have nothing to do, else we insert it at the right place
         if *value < self.values[last_idx] {
@@ -104,9 +80,11 @@ impl<V> OrdMinHashStore<V>
                 self.indices[array_idx] = self.indices[array_idx - 1];
                 array_idx -= 1;
             }
+            // so self.values[array_idx] is >= self.values[array_idx]-1 or array_idx = first_idx. self.values is increasing
             self.values[array_idx] = *value;
             self.indices[array_idx] = data_idx as u64;
-            log::debug!("exiting update indices : {:?}", self.indices);
+            maxtracker.update(permuted_idx, self.values[last_idx]);
+            log::trace!("exiting update indices : {:?}", self.indices);
             return true;
         }
         else {
@@ -130,6 +108,7 @@ impl<V> OrdMinHashStore<V>
     pub(crate) fn create_signature<D:Hash, H : Hasher+Default>(&mut self, data : &[D]) -> Vec<u64> {
         //
         assert!(data.len() >= self.l , "data length must be greater than l");
+        log::debug!("indices : {:?}", self.indices);
         //
         let mut result = Vec::<u64>::with_capacity(self.m);
         //
@@ -139,6 +118,7 @@ impl<V> OrdMinHashStore<V>
         // TODO make generic over this hasher
         //
         for i in 0..self.m {
+            let mut nb_bad_indices = 0;
             let mut combine_hasher = WyHash::with_seed(0xde10c59a9218c94a);
             let start = i * self.l;
             let end = start + self.l;
@@ -146,12 +126,20 @@ impl<V> OrdMinHashStore<V>
             // fill self.hashbuffer
             for j in 0..self.l {
                 let data_idx = usize::try_from(self.indices[start+j]).unwrap();
-                data[data_idx].hash(&mut hasher);
-                self.hashbuffer[j] = hasher.finish();
-                combine_hasher.write_u64(self.hashbuffer[j]);
+                if data_idx < data.len() {
+                    data[data_idx].hash(&mut hasher);
+                    self.hashbuffer[j] = hasher.finish();
+                    combine_hasher.write_u64(self.hashbuffer[j]);
+                }
+                else {
+                    nb_bad_indices += 1;
+                }
             }
             // combine hash values
             result.push(combine_hasher.finish());
+            if nb_bad_indices > 0 {
+                log::error!("OrdMinHashStore::create_signature slot i : {} nb_bad_indices : {}", i, nb_bad_indices);
+            }
             // TODO to make generic over combiner?
         }
         return result;
@@ -172,7 +160,7 @@ pub struct ProbOrdMinHash2<H> {
     ///
     b_hasher: BuildHasherDefault<H>,
     //
-    max_tracker : MaxValueTracker,
+    max_tracker : MaxValueTracker<f64>,
     //
     min_store : OrdMinHashStore<f64>,
     ///
@@ -208,7 +196,7 @@ impl <H> ProbOrdMinHash2<H>
 
 
     /// hash a full batch of data. All internal data are cleared at each new call
-    pub fn hash_set<D:Eq+Hash>(&mut self, data : &[D]) -> Vec<u64> {
+    pub fn hash_set<D:Eq+Hash+Debug>(&mut self, data : &[D]) -> Vec<u64> {
         // check size
         let size = data.len();
         if size < self.min_store.get_l() {
@@ -227,8 +215,9 @@ impl <H> ProbOrdMinHash2<H>
             let mut hasher = self.b_hasher.build_hasher();
             data[i].hash(&mut hasher);
             let id_hash : u64 = hasher.finish();
-            let count = match self.counter.get_mut(&id_hash) {
+            let newcount = match self.counter.get_mut(&id_hash) {
                 Some(count) => {
+                    log::debug!("incrementing count for data , {:?}, hash value : {}", data[i], id_hash);
                     *count = *count + 1;
                     *count
                 }
@@ -240,23 +229,18 @@ impl <H> ProbOrdMinHash2<H>
             // get a random generator initialized with seed corresponding to couple(id_hash, count)
             // Xoshiro256PlusPlus use [u8; 32] as seed , we must fill seed_256 with (id_hash, count)
             // TODO to optimize
-            let mut seed_256 = [0u8; 32];
-            seed_256[0..8].copy_from_slice(&id_hash.to_ne_bytes());
-            seed_256[8..16].copy_from_slice(&count.to_ne_bytes());
-            let mut rng = Xoshiro256PlusPlus::from_seed(seed_256);
+            let mut seed_128 = [0u8; 16];
+            seed_128[0..8].copy_from_slice(&id_hash.to_ne_bytes());
+            seed_128[8..16].copy_from_slice(&newcount.to_ne_bytes());
+            let mut rng = Xoshiro128PlusPlus::from_seed(seed_128);
             x = Exp1.sample(&mut rng);
             let mut nb_inserted = 0;
-            let qmax = self.max_tracker.get_max_value();
-            while x < qmax {
+            while x < self.max_tracker.get_max_value() {
                 let k = self.permut_generator.next(&mut rng);
                 assert!(k < self.m);
-                let inserted = self.min_store.update(k, &x, i);
+                let inserted = self.min_store.update_with_maxtracker(k, &x, i, &mut self.max_tracker);
                 if !inserted {
                     break;
-                }
-                else {
-                    // we update max value tracker with value at pos
-                    self.max_tracker.update(k, x);
                 }
                 // x is growing, so even if last update was possible at slot k, it is possible another value of x
                 // cannot be inserted (if k was last possible index), if no update possible after preceding update, we can exit
@@ -334,6 +318,13 @@ fn test_vectors(m : u32, l : usize, v1 : &[u32], v2 : &[u32], nb_iter : usize) {
 } // end of test_vectors
 
 
+fn get_pattern_1() -> (Vec<u32>, Vec<u32>) {
+    let v1: Vec<u32> = vec![0, 0, 1, 2];
+    let v2: Vec<u32> = vec![0, 1, 1, 2];
+    //
+    return (v1,v2)
+} 
+
 fn get_pattern_2() -> (Vec<u32>, Vec<u32>) {
     let v1: Vec<u32> = vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 2, 4, 5];
     let v2: Vec<u32> = vec![0, 1, 2, 6, 4, 0, 7, 1, 2, 3, 2, 4, 5];
@@ -375,8 +366,20 @@ fn ordminhash2_random_data() {
 } // end of test_ordminhash2_random_data
 
 
-
-
+#[test]
+fn ordminhash2_equality() {
+       //
+    log_init_test();
+    log::info!("in test_ordminhash2_equality");
+    //
+    let m_s : u32 = 5;
+    let l = 2;
+    let nb_iter = 10;
+    //
+    let v = [0, 0, 1, 2, 2 , 3, 4];
+    //
+    test_vectors(m_s, l , &v, &v, nb_iter);
+} // end of test_ordminhash2_equality
 
 
 #[test]
@@ -386,11 +389,13 @@ fn test_ordminhash2_p1() {
     log_init_test();
     log::info!("in test_ordminhash2_1");
     //
-    let m_s : u32 = 10;
-    let l = 2;
-    let nb_iter = 1;
+    let m_s : u32 = 32;
+    let l = 3;
+    let nb_iter = 1000;
     //
-    test_vectors(m_s, l , &[0, 0, 1, 2, 2 , 3, 4], &[0, 0, 2, 3, 7,7], nb_iter);
+    let pattern = get_pattern_1();
+    //
+    test_vectors(m_s, l, &pattern.0, &pattern.1, nb_iter);
 } // end of test_ordminhash2_p1
 
 
@@ -401,8 +406,15 @@ fn test_ordminhash2_p2() {
     log::info!("in test_ordminhash2_p2");
     let pattern = get_pattern_2();
     //
-    let nb_iter = 1;
+    let nb_iter = 10;
+
+    test_vectors(32, 1, &pattern.0, &pattern.1, nb_iter);
+   
+    test_vectors(32, 3, &pattern.0, &pattern.1, nb_iter);
+
     test_vectors(32, 5, &pattern.0, &pattern.1, nb_iter);
+    //
+
 } // end of test_ordminhash2_p2
 
 

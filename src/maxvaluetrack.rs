@@ -3,24 +3,49 @@
 
 use log::{trace};
 
+// A value for which there is a (natural) maximal value
+pub trait MaxValue {
+    //
+    fn get_max() -> Self;
+} // end of trait Max
 
+
+macro_rules! implement_maxvalue_for(
+    ($ty:ty) => (
+        impl MaxValue for $ty {
+            fn get_max() -> $ty {
+                <$ty>::MAX
+            }            
+        }
+    ) // end impl for ty
+);
+
+
+implement_maxvalue_for!(f64);
+implement_maxvalue_for!(f32);
+implement_maxvalue_for!(u32);
+implement_maxvalue_for!(u16);
+implement_maxvalue_for!(i32);
+implement_maxvalue_for!(u64);
+implement_maxvalue_for!(usize);
 
 // structure to keep track of max values in hash set
 // adapted from class MaxValueTracker
-pub(crate) struct MaxValueTracker {
+pub(crate) struct MaxValueTracker<V> {
     m : usize,
     // last_index = 2*m-2. max of array is at slot last_index
     last_index : usize,
     // dimensioned to m hash functions
-    values : Vec<f64>
+    values : Vec<V>
 }
 
 
-impl MaxValueTracker {
+impl <V> MaxValueTracker<V> 
+    where V : MaxValue + PartialOrd + Copy + std::fmt::Debug {
     pub fn new(m:usize) -> Self {
         let last_index  = ((m << 1) - 2) as usize;  // 0-indexation for the difference with he paper, lastIndex = 2*m-2
         let vlen = last_index+1;
-        let values : Vec::<f64> = (0..vlen).map( |_| f64::INFINITY).collect();
+        let values : Vec::<V> = (0..vlen).map( |_| V::get_max()).collect();
         MaxValueTracker{m, last_index, values}
     }
 
@@ -31,9 +56,9 @@ impl MaxValueTracker {
     // parent of k is m + (k/2)
     // and accordingly
     // sibling ok k is k+1 if k even, k-1 else so it is given by bitxor(k,1)
-    pub(crate) fn update(&mut self, k:usize, value:f64) {
+    pub(crate) fn update(&mut self, k:usize, value:V) {
         assert!(k < self.m);
-        trace!("\n max value tracker update k, value , value at k {} {} {:?} ", k, value, self.values[k]);
+        trace!("\n max value tracker update k, value , value at k {} {:?} {:?} ", k, value, self.values[k]);
         let mut current_value = value;
         let mut current_k = k;
         let mut more = false;
@@ -42,7 +67,7 @@ impl MaxValueTracker {
         }
         
         while more {
-            trace!("mxvt update k value {} {}", current_k, current_value);
+            trace!("mxvt update k value {} {:?}", current_k, current_value);
             self.values[current_k] = current_value;
             let pidx = self.m + (current_k/2) as usize;   // m + upper integer value of k/2 beccause of 0 based indexation
             if pidx > self.last_index {
@@ -56,7 +81,7 @@ impl MaxValueTracker {
                 break;     // means parent current and sibling are equals no more propagation needed
             }
             // now either self.values[siblidx] <self.values[pidx] or current_value < self.values[pidx]
-            trace!("propagating current_value {} sibling  {:?} ? ", current_value, self.values[siblidx]);
+            trace!("propagating current_value {:?} sibling  {:?} ? ", current_value, self.values[siblidx]);
             //
             if current_value < self.values[siblidx] {
                 trace!("     propagating sibling value {:?} to parent {}", self.values[siblidx], pidx);
@@ -74,12 +99,12 @@ impl MaxValueTracker {
 
 
     /// return the maximum value maintained in the data structure
-    pub fn get_max_value(&self) -> f64 {
+    pub fn get_max_value(&self) -> V {
         return self.values[self.last_index]
     }
     
     // returns true if a value can be inserted, false it is too high
-    pub fn is_update_possible(&self, value : f64) -> bool {
+    pub fn is_update_possible(&self, value : V) -> bool {
         if value < self.values[self.last_index] {
             true
         }
@@ -95,13 +120,13 @@ impl MaxValueTracker {
     }
 
     /// get value MaxValueTracker at slot
-    pub(crate) fn get_value(&self, slot: usize) -> f64 {
+    pub(crate) fn get_value(&self, slot: usize) -> V {
         self.values[slot]
     } // end of get_value
 
     /// reset to max value f64::MAX
     pub(crate) fn reset(&mut self) {
-        self.values.fill(f64::MAX);
+        self.values.fill(V::get_max());
     }
 
 
@@ -110,7 +135,7 @@ impl MaxValueTracker {
     pub fn dump(&self) {
         println!("\n\nMaxValueTracker dump : ");
         for i in 0..self.values.len() {
-            println!(" i  value   {}   {} ", i , self.values[i]);
+            println!(" i  value   {}   {:?} ", i , self.values[i]);
         }
     } // end of dump
 } // end of impl MaxValueTracker

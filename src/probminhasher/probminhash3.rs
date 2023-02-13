@@ -45,7 +45,7 @@ pub struct ProbMinHash3<D, H: Hasher+Default>
     ///
     b_hasher: BuildHasherDefault<H>,
     /// field to keep track of max hashed values
-    maxvaluetracker : MaxValueTracker,
+    maxvaluetracker : MaxValueTracker<f64>,
     /// a exponential law restricted to interval [0., 1)
     exp01 : ExpRestricted01,
     ///  final signature of distribution. allocated to size m
@@ -170,7 +170,7 @@ pub struct ProbMinHash3a<D,H>
     ///
     b_hasher : BuildHasherDefault::<H>,
     /// field to keep track of max hashed values
-    maxvaluetracker : MaxValueTracker,
+    maxvaluetracker : MaxValueTracker<f64>,
     /// a exponential law restricted to interval [0., 1)
     exp01 : ExpRestricted01,
     /// Buffer to store object to be processed in second pass. Stores (object, inverse weight, generator)

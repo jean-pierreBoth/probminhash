@@ -3,7 +3,6 @@
 use log::{trace};
 
 use rand::distributions::{Distribution,Uniform};
-use rand_xoshiro::Xoshiro256PlusPlus;
 
 
 // Fisher Yates random permutation generation (sampling without replacement), with lazy generation
@@ -33,7 +32,7 @@ impl FYshuffle {
     /// as the permutation is fully sampled.
     /// If called more than m times, it calls reset implicitly to generate a new permutation.
     /// It is possible (and recommended) to reset explicitly after m successive call to next method
-    pub fn next(&mut self, rng : &mut Xoshiro256PlusPlus) -> usize {
+    pub fn next(&mut self, rng : &mut impl rand::Rng) -> usize {
         if self.lastidx >= self.m {
             self.reset();
             log::debug!("FYshuffle next calling reset ");
@@ -69,6 +68,8 @@ impl FYshuffle {
 mod tests {
 
 use log::*;
+
+use rand_xoshiro::Xoshiro256PlusPlus;
 
 use rand::prelude::*;
 
