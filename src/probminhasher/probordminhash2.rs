@@ -113,7 +113,6 @@ impl<V> OrdMinHashStore<V>
         let mut result = Vec::<u64>::with_capacity(self.m);
         //
         let b_hasher = BuildHasherDefault::<H>::default();
-        let mut hasher = b_hasher.build_hasher();
         // We use wyrand as Ertl. 
         // TODO make generic over this hasher
         //
@@ -127,6 +126,7 @@ impl<V> OrdMinHashStore<V>
             for j in 0..self.l {
                 let data_idx = usize::try_from(self.indices[start+j]).unwrap();
                 if data_idx < data.len() {
+                    let mut hasher = b_hasher.build_hasher();
                     data[data_idx].hash(&mut hasher);
                     self.hashbuffer[j] = hasher.finish();
                     combine_hasher.write_u64(self.hashbuffer[j]);
@@ -236,6 +236,7 @@ impl <H> ProbOrdMinHash2<H>
             x = Exp1.sample(&mut rng);
             let mut nb_inserted = 0;
             while x < self.max_tracker.get_max_value() {
+                // we use sampling without replacement in [0..m-1] so we can have each k only once as we exit loop before m iterations!
                 let k = self.permut_generator.next(&mut rng);
                 assert!(k < self.m);
                 let inserted = self.min_store.update_with_maxtracker(k, &x, i, &mut self.max_tracker);
@@ -297,8 +298,8 @@ fn gen_01seq(k : usize, n : usize) -> (Vec<u32>, Vec<u32>) {
 
 // 
 fn test_vectors(m : u32, l : usize, v1 : &[u32], v2 : &[u32], nb_iter : usize) {
-    let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m,l);
     //
+    let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m,l);
     // get histo results
     let mut equals = (0..m+1).into_iter().map(|_| 0).collect::<Vec<usize>>();
     //
@@ -389,9 +390,9 @@ fn test_ordminhash2_p1() {
     log_init_test();
     log::info!("in test_ordminhash2_1");
     //
-    let m_s : u32 = 32;
+    let m_s : u32 = 1024;
     let l = 3;
-    let nb_iter = 1000;
+    let nb_iter = 100000;
     //
     let pattern = get_pattern_1();
     //
@@ -406,12 +407,18 @@ fn test_ordminhash2_p2() {
     log::info!("in test_ordminhash2_p2");
     let pattern = get_pattern_2();
     //
-    let nb_iter = 10;
+    let nb_iter = 100;
 
     test_vectors(32, 1, &pattern.0, &pattern.1, nb_iter);
-   
+
+    //  pattern2 m = 32, l = 3
+    //  0 0 7 23 103 347 1022 2415 4579 7443 10728 13314 14353 13844 11563 8556 5604 3207 1714 732 292 101 41 8 4 0 0 0 0 0 0 0 0
+    //
     test_vectors(32, 3, &pattern.0, &pattern.1, nb_iter);
 
+    // pattern2 m = 32, l = 5
+    // 713 3520 9579 16223 19522 18720 14512 8965 4837 2190 817 277 95 25 4 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    //
     test_vectors(32, 5, &pattern.0, &pattern.1, nb_iter);
     //
 
@@ -420,7 +427,7 @@ fn test_ordminhash2_p2() {
 
 
 /* 
-Results from Ertl
+Results from Ertl  
 OrderMinHash       : 10016 31147 36342 18855 3640
 FastOrderMinHash1  : 9925  31121 36210 19020 3724
 FastOrderMinHash1a : 9925  31121 36210 19020 3724
@@ -428,7 +435,7 @@ FastOrderMinHash2  : 10134 30893 36461 18797 3715
 
 */
 #[test]
-fn test_ordminhash2_dist_p5() {
+fn test_ordminhash2_p5() {
     //
     log_init_test();
     log::info!("in test_ordminhash2_dist_5");
