@@ -17,7 +17,7 @@ use std::fmt::Debug;
 use std::collections::HashMap;
 
 use rand::prelude::*;
-use rand_xoshiro::{Xoshiro256PlusPlus, Xoshiro128PlusPlus};
+use rand_xoshiro::{Xoshiro256PlusPlus};
 use rand_distr::Exp1;
 
 use wyhash::WyHash;
@@ -40,7 +40,11 @@ struct OrdMinHashStore<V>
     // m * l minimal hashed values generted from the data
     values : Vec<V>,
     // hashed 
-    hashbuffer : Vec<u64>
+    hashbuffer : Vec<u64>,
+    // to change seed
+    seed_rng : ThreadRng,
+    // seeds for WyHash
+    wyhash_seed : u64
 } // end of struct OrdMinHashStore
 
 
@@ -55,12 +59,20 @@ impl<V> OrdMinHashStore<V>
         let indices = (0..ml).into_iter().map(|_| u64::MAX).collect::<Vec::<u64>>();
         let values = (0..ml).into_iter().map(|_| V::get_max()).collect::<Vec::<V>>();
         let hashbuffer = (0..l).into_iter().map(|_| 0).collect();
+        let mut rng = ThreadRng::default();
+        let wyhash_seed = rng.next_u64();
         //
         assert!(l < 16);
-        OrdMinHashStore{m, l, indices, values, hashbuffer}
+        OrdMinHashStore{m, l, indices, values, hashbuffer, seed_rng : rng.clone(), wyhash_seed}
     } // end of new
 
 
+    #[allow(unused)]
+    pub(crate) fn change_wyhash_seed(&mut self) {
+        self.wyhash_seed = self.seed_rng.next_u64();
+        log::trace!("OrdMinHashStore setting wyhash_seed to : {:?}", self.wyhash_seed);
+
+    } 
     // returns true if value could be inserted, false otherwise
     // value is hashed value of data at index idx, coming from Probordminhash2
     // we insert value and data_idx in sorted arrays values and indices
@@ -118,7 +130,7 @@ impl<V> OrdMinHashStore<V>
         //
         for i in 0..self.m {
             let mut nb_bad_indices = 0;
-            let mut combine_hasher = WyHash::with_seed(0xde10c59a9218c94a);
+            let mut combine_hasher = WyHash::with_seed(self.wyhash_seed);
             let start = i * self.l;
             let end = start + self.l;
             self.indices[start..end].sort_unstable();
@@ -142,6 +154,7 @@ impl<V> OrdMinHashStore<V>
             }
             // TODO to make generic over combiner?
         }
+        log::debug!("create_signature : {:?}", result);
         return result;
     } // end of update_signature
 
@@ -169,6 +182,10 @@ pub struct ProbOrdMinHash2<H> {
     permut_generator : FYshuffle,
     // object counter
     counter : HashMap<u64, u64>,
+    // to change seed
+    seed_rng : ThreadRng,
+    // seed used to modify sequences if necessary (as for testing, or see stability of results.)
+    seed : u64
 } // end of ProbOrdMinHash2
 
 
@@ -190,8 +207,11 @@ impl <H> ProbOrdMinHash2<H>
         //
         let counter = HashMap::<u64, u64>::new();
         //
+        let mut rng = ThreadRng::default();
+        let seed = rng.next_u64();
+        //
         ProbOrdMinHash2{m, b_hasher : BuildHasherDefault::<H>::default(), max_tracker, min_store : minstore, g , 
-                permut_generator : FYshuffle::new(m), counter}
+                permut_generator : FYshuffle::new(m), counter, seed_rng : rng.clone(), seed}
     } // end new
 
 
@@ -217,7 +237,6 @@ impl <H> ProbOrdMinHash2<H>
             let id_hash : u64 = hasher.finish();
             let newcount = match self.counter.get_mut(&id_hash) {
                 Some(count) => {
-                    log::debug!("incrementing count for data , {:?}, hash value : {}", data[i], id_hash);
                     *count = *count + 1;
                     *count
                 }
@@ -229,10 +248,13 @@ impl <H> ProbOrdMinHash2<H>
             // get a random generator initialized with seed corresponding to couple(id_hash, count)
             // Xoshiro256PlusPlus use [u8; 32] as seed , we must fill seed_256 with (id_hash, count)
             // TODO to optimize
-            let mut seed_128 = [0u8; 16];
-            seed_128[0..8].copy_from_slice(&id_hash.to_ne_bytes());
-            seed_128[8..16].copy_from_slice(&newcount.to_ne_bytes());
-            let mut rng = Xoshiro128PlusPlus::from_seed(seed_128);
+            let mut seed_256 = [0u8; 32];
+            seed_256[0..8].copy_from_slice(&id_hash.to_ne_bytes());
+            seed_256[8..16].copy_from_slice(&newcount.to_ne_bytes());
+            seed_256[16..24].copy_from_slice(&self.seed.to_ne_bytes());
+            seed_256[24..32].copy_from_slice(&0xcf7355744a6e8145_u64.to_ne_bytes());
+    
+            let mut rng = Xoshiro256PlusPlus::from_seed(seed_256);
             x = Exp1.sample(&mut rng);
             let mut nb_inserted = 0;
             while x < self.max_tracker.get_max_value() {
@@ -262,6 +284,12 @@ impl <H> ProbOrdMinHash2<H>
         return self.min_store.create_signature::<D,H>(data);
     } // end of hash_set
 
+    /// This function changes the state of internal random generator and hash functions.
+    /// It is mainly useful to study variance of the estimator as in tests, and can be ignored for other purposes.
+    pub fn change_rng_seed(&mut self) {
+        self.min_store.change_wyhash_seed();
+        self.seed = self.seed_rng.next_u64();
+    }
 }  // end of impl ProbOrdMinHash2
 
 
@@ -313,6 +341,7 @@ fn test_vectors(m : u32, l : usize, v1 : &[u32], v2 : &[u32], nb_iter : usize) {
             }
         }
         equals[nb_equal as usize] += 1;
+        pordminhash.change_rng_seed();
     }
     //
     log::info!(" equalities at m slots : {:?}", equals);
@@ -334,6 +363,12 @@ fn get_pattern_2() -> (Vec<u32>, Vec<u32>) {
 } 
 
 
+fn get_pattern_3() -> (Vec<u32>, Vec<u32>) {
+    let v1: Vec<u32> =  vec![0, 1, 2, 3, 4, 0, 1, 2, 3, 2, 4, 5, 0, 1, 2, 3, 4, 0, 1, 2, 6, 2, 4, 5];
+    let v2: Vec<u32> = vec![0, 1, 2, 6, 4, 0, 7, 1, 2, 3, 2, 4, 5];
+    //
+    return (v1,v2)
+} 
 
 
 #[test]
@@ -383,6 +418,8 @@ fn ordminhash2_equality() {
 } // end of test_ordminhash2_equality
 
 
+
+
 #[test]
 // test pattern comparisons
 fn test_ordminhash2_p1() {
@@ -407,33 +444,74 @@ fn test_ordminhash2_p2() {
     log::info!("in test_ordminhash2_p2");
     let pattern = get_pattern_2();
     //
-    let nb_iter = 100;
+    let nb_iter = 100000;
 
-    test_vectors(32, 1, &pattern.0, &pattern.1, nb_iter);
+//    test_vectors(32, 1, &pattern.0, &pattern.1, nb_iter);
 
     //  pattern2 m = 32, l = 3
     //  0 0 7 23 103 347 1022 2415 4579 7443 10728 13314 14353 13844 11563 8556 5604 3207 1714 732 292 101 41 8 4 0 0 0 0 0 0 0 0
     //
+    log::info!("\n m : 32, l : 3");
     test_vectors(32, 3, &pattern.0, &pattern.1, nb_iter);
 
     // pattern2 m = 32, l = 5
     // 713 3520 9579 16223 19522 18720 14512 8965 4837 2190 817 277 95 25 4 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
     //
+    log::info!("\n m : 32, l : 5");
     test_vectors(32, 5, &pattern.0, &pattern.1, nb_iter);
     //
+    log::info!("\n m : 1024, l : 3");
+    test_vectors(1024, 3, &pattern.0, &pattern.1, nb_iter);
 
+    log::info!("\n m : 1024, l : 5");
+    test_vectors(1024, 5, &pattern.0, &pattern.1, nb_iter);
 } // end of test_ordminhash2_p2
 
 
+#[test]
+fn test_ordminhash2_p3() {
+    //
+    log_init_test();
+    log::info!("in test_ordminhash2_p3");
+    //
+    let pattern = get_pattern_3();
+    //
+    let nb_iter = 100000;
 
-/* 
-Results from Ertl  
-OrderMinHash       : 10016 31147 36342 18855 3640
-FastOrderMinHash1  : 9925  31121 36210 19020 3724
-FastOrderMinHash1a : 9925  31121 36210 19020 3724
-FastOrderMinHash2  : 10134 30893 36461 18797 3715
+    log::info!("\n m : 1024, l : 3");
+    test_vectors(1024, 3, &pattern.0, &pattern.1, nb_iter);
 
-*/
+
+
+    /* Ertl pattern 3 m = 32, l = 3
+     6800 19111  25961 22759  14462  6950   2768   876    261 43 9 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+     [651, 3392, 8604, 14253, 17917, 17572, 14376, 10012, 6463, 3513, 1739, 864, 384, 146, 67, 31, 11, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    */
+
+    log::info!("\n m : 32, l : 3");
+    test_vectors(32, 3, &pattern.0, &pattern.1, nb_iter);
+
+
+    /* Ertl pattern3 m = 32, l = 5
+    78348 19158 2308 180 6 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+
+    probordminhash2
+    [70282, 24213, 4740, 656, 96, 12, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    */
+    log::info!("\n m : 32, l : 5");
+    test_vectors(32, 5, &pattern.0, &pattern.1, nb_iter);
+
+
+    log::info!("\n m : 1024, l : 3");
+    test_vectors(1024, 3, &pattern.0, &pattern.1, nb_iter);
+
+    log::info!("\n m : 1024, l : 5");
+    test_vectors(1024, 5, &pattern.0, &pattern.1, nb_iter);
+} // end of test_ordminhash2_p3
+
+
+
 #[test]
 fn test_ordminhash2_p5() {
     //
