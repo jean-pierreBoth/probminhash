@@ -74,7 +74,10 @@ impl<D,H> ProbMinHash3<D, H>
     /// It is the building block of the computation, but this method 
     /// does not check for unicity of id added in hash computation.  
     /// It is the user's responsability to enforce that. See function hash_weigthed_idxmap
-    pub fn hash_item(&mut self, id:D, weight:f64) {
+    pub fn hash_item<F>(&mut self, id:D, weight_a : &F) 
+                where  F : num::ToPrimitive + std::fmt::Display {
+        //
+        let weight = weight_a.to_f64().unwrap();
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv = 1./weight;
@@ -115,7 +118,7 @@ impl<D,H> ProbMinHash3<D, H>
         where T: WeightedSet<Object=D> + Iterator<Item=D> {
             while let Some(obj) = &data.next() {
                 let weight = data.get_weight(&obj);
-                self.hash_item(*obj, weight);
+                self.hash_item(*obj, &weight);
             }
     } // end of hash method
 
@@ -123,15 +126,16 @@ impl<D,H> ProbMinHash3<D, H>
     /// computes set signature when set is given as an IndexMap with weights corresponding to values.  
     /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
     /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
-    pub fn hash_weigthed_idxmap<Hidx>(&mut self, data: &IndexMap<D, f64, Hidx>) 
+    pub fn hash_weigthed_idxmap<Hidx, F>(&mut self, data: &IndexMap<D, F, Hidx>) 
                 where   Hidx : std::hash::BuildHasher, 
+                        F : num::ToPrimitive + std::fmt::Display
     {
         let mut iter = data.iter();
         while let Some((key, weigth)) = iter.next() {
             trace!(" retrieved key {:?} ", key);  
                 // we must convert Kmer64bit to u64 and be able to retrieve the original Kmer64bit
                 // we got weight as something convertible to f64
-            self.hash_item(*key, *weigth);
+            self.hash_item(*key, weigth);
         };
     }  // end of hash_weigthed_idxmap
 
@@ -139,14 +143,15 @@ impl<D,H> ProbMinHash3<D, H>
     /// computes set signature when set is given as an HashMap with weights corresponding to values.(equivalent to the method with and IndexMap)
     /// This ensures that objects are assigned a weight only once, so that we really have a set of objects with weight associated.  
     /// The raw method hash_item can be used with the constraint that objects are sent ONCE in the hash method.
-    pub fn hash_weigthed_hashmap<Hidx>(&mut self, data: &HashMap<D, f64, Hidx>) 
+    pub fn hash_weigthed_hashmap<Hidx,F>(&mut self, data: &HashMap<D, F, Hidx>) 
                 where   Hidx : std::hash::BuildHasher, 
+                        F : num::ToPrimitive + std::fmt::Display
     {
         let mut iter = data.iter();
         while let Some((key, weight)) = iter.next() {
             trace!(" retrieved key {:?} ", key);  
             // we got weight as something convertible to f64
-            self.hash_item(*key, *weight);
+            self.hash_item(*key, weight);
         }
     }  // end of hash_weigthed_hashmap
     
@@ -393,7 +398,7 @@ use super::*;
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
         let set_size = 100;
-        let nbhash = 50;
+        let nbhash = 100;
         //
         // choose weights for va and vb elements
         let mut wa = Vec::<f64>::with_capacity(set_size);
@@ -434,7 +439,7 @@ use super::*;
         let mut waprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
         for i in 0..set_size {
             if wa[i] > 0. {
-                waprobhash.hash_item(i, wa[i]);
+                waprobhash.hash_item::<f64>(i, &wa[i]);
             }
         }
         // waprobhash.maxvaluetracker.dump();
@@ -443,7 +448,7 @@ use super::*;
         let mut wbprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash,0 );
         for i in 0..set_size {
             if wb[i] > 0. {
-                wbprobhash.hash_item(i, wb[i]);
+                wbprobhash.hash_item(i, &wb[i]);
             }
         }        
         let siga = waprobhash.get_signature();
@@ -454,7 +459,7 @@ use super::*;
 //       waprobhash.maxvaluetracker.dump();
 //       wbprobhash.maxvaluetracker.dump();
         //
-        info!("exact jp = {} ,jp estimated = {} ", jp, jp_approx);
+        info!("exact jp = {:.3e} ,jp estimated = {:.3e} ", jp, jp_approx);
         assert!(jp_approx > 0.);
     } // end of test_prob_count_intersection
 
@@ -569,7 +574,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     let mut waprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wa[i] > 0. {
-            waprobhash.hash_item(i, wa[i]);
+            waprobhash.hash_item(i, &wa[i]);
         }
     }
     //
@@ -577,7 +582,7 @@ fn test_probminhash3_count_intersection_unequal_weights() {
     let mut wbprobhash = ProbMinHash3::<usize, FnvHasher>::new(nbhash, 0);
     for i in 0..set_size {
         if wb[i] > 0. {
-            wbprobhash.hash_item(i, wb[i]);
+            wbprobhash.hash_item(i, &wb[i]);
         }
     }        
     let siga = waprobhash.get_signature();
