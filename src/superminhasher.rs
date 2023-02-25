@@ -269,6 +269,13 @@ pub fn compute_superminhash_jaccard(hsketch: &Vec<f64>  , other_sketch: &Vec<f64
 }  // end of get_jaccard_index_estimate
 
 
+/// just an alias for backward compatibility
+#[inline]
+pub fn get_jaccard_index_estimate(hsketch: &Vec<f64>  , other_sketch: &Vec<f64>)  -> Result<f64, ()>  {
+    return compute_superminhash_jaccard(hsketch, other_sketch);
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////////////:
 
 
