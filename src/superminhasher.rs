@@ -24,8 +24,7 @@ use std::f64;
 
 #[allow(unused_imports)]
 use crate::invhash;
-#[allow(unused_imports)]
-use fnv::FnvHasher;
+
 
 
 
@@ -249,9 +248,13 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
 
 
 
-/// returns an estimator of jaccard index between 2 sketches coming from the same
-/// SuperMinHash struct (using reinit for example) or two SuperMinHash struct initialized with same parameters.
-pub fn get_jaccard_index_estimate(hsketch: &Vec<f64>  , other_sketch: &Vec<f64>)  -> Result<f64, ()> {
+/// Returns an estimator of jaccard index between 2 sketches coming from the same
+/// SuperMinHash struct (using reinit for example) or two SuperMinHash struct initialized with same Hasher parameters.
+/// with the same number of hash signatures.  
+///   
+/// Note that if *jp* is the returned value of this function,  
+/// the distance between siga and sigb, associated to the jaccard index is *1.- jp* 
+pub fn compute_superminhash_jaccard(hsketch: &Vec<f64>  , other_sketch: &Vec<f64>)  -> Result<f64, ()> {
     if hsketch.len() != other_sketch.len() {
         return Err(());
     }
@@ -272,6 +275,7 @@ pub fn get_jaccard_index_estimate(hsketch: &Vec<f64>  , other_sketch: &Vec<f64>)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fnv::FnvHasher;
 
 
     #[allow(dead_code)]
@@ -311,7 +315,7 @@ mod tests {
         }
         let skb = sminhash.get_hsketch();
         //
-        let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
         let jexact = 0.05;
         println!(" jaccard estimate {jacfmt:.2}, j exact : {jexactfmt:.2} ", jacfmt=jac, jexactfmt=jexact);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
@@ -352,7 +356,7 @@ mod tests {
         }
         let skb = sminhash.get_hsketch();
         //
-        let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
         let jexact = 0.05;
         println!(" jaccard estimate : {}  exact value : {} ", jac, jexact);
         // we have 100 common values and we sample a sketch of size 50 on 2000 values , we should see intersection

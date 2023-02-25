@@ -59,11 +59,11 @@ impl<V> OrdMinHashStore<V>
         let indices = (0..ml).into_iter().map(|_| u64::MAX).collect::<Vec::<u64>>();
         let values = (0..ml).into_iter().map(|_| V::get_max()).collect::<Vec::<V>>();
         let hashbuffer = (0..l).into_iter().map(|_| 0).collect();
-        let mut rng = ThreadRng::default();
-        let wyhash_seed = rng.next_u64();
+        let rng = ThreadRng::default();
+        let wyhash_seed = 0xcf7355744a6e8145;
         //
         assert!(l < 16);
-        OrdMinHashStore{m, l, indices, values, hashbuffer, seed_rng : rng.clone(), wyhash_seed}
+        OrdMinHashStore{m, l, indices, values, hashbuffer, seed_rng : rng, wyhash_seed}
     } // end of new
 
 
@@ -151,6 +151,7 @@ impl<V> OrdMinHashStore<V>
             result.push(combine_hasher.finish());
             if nb_bad_indices > 0 {
                 log::error!("OrdMinHashStore::create_signature slot i : {} nb_bad_indices : {}", i, nb_bad_indices);
+                assert_eq!(nb_bad_indices, 0);
             }
             // TODO to make generic over combiner?
         }
@@ -215,8 +216,9 @@ impl <H> ProbOrdMinHash2<H>
     } // end new
 
 
-    /// hash a full batch of data. All internal data are cleared at each new call
-    pub fn hash_set<D:Eq+Hash+Debug>(&mut self, data : &[D]) -> Vec<u64> {
+    /// hash a full batch of data and return a signature as Vec<u64> of size m.
+    /// All internal data are cleared at each new call, so the structure ProbOrdMinHash2 can be reused.
+    pub fn hash_set<D:Eq+Hash>(&mut self, data : &[D]) -> Vec<u64> {
         // check size
         let size = data.len();
         if size < self.min_store.get_l() {
@@ -252,7 +254,7 @@ impl <H> ProbOrdMinHash2<H>
             seed_256[0..8].copy_from_slice(&id_hash.to_ne_bytes());
             seed_256[8..16].copy_from_slice(&newcount.to_ne_bytes());
             seed_256[16..24].copy_from_slice(&self.seed.to_ne_bytes());
-            seed_256[24..32].copy_from_slice(&0xcf7355744a6e8145_u64.to_ne_bytes());
+//            seed_256[24..32].copy_from_slice(&0xcf7355744a6e8145_u64.to_ne_bytes());
     
             let mut rng = Xoshiro256PlusPlus::from_seed(seed_256);
             x = Exp1.sample(&mut rng);
@@ -284,8 +286,9 @@ impl <H> ProbOrdMinHash2<H>
         return self.min_store.create_signature::<D,H>(data);
     } // end of hash_set
 
-    /// This function changes the state of internal random generator and hash functions.
-    /// It is mainly useful to study variance of the estimator as in tests, and can be ignored for other purposes.
+    /// This function changes the state of internal random generator.
+    /// It is mainly useful to study variance of the estimator as in tests, and should be ignored for other purposes.
+    /// **If a database of hashed value is used, it must not as to keep coherent hashing.**
     pub fn change_rng_seed(&mut self) {
         self.min_store.change_wyhash_seed();
         self.seed = self.seed_rng.next_u64();
@@ -327,7 +330,7 @@ fn gen_01seq(k : usize, n : usize) -> (Vec<u32>, Vec<u32>) {
 // 
 fn test_vectors(m : u32, l : usize, v1 : &[u32], v2 : &[u32], nb_iter : usize) {
     //
-    let mut pordminhash =  ProbOrdMinHash2::<FnvHasher>::new(m,l);
+    let mut pordminhash =  ProbOrdMinHash2::<WyHash>::new(m,l);
     // get histo results
     let mut equals = (0..m+1).into_iter().map(|_| 0).collect::<Vec<usize>>();
     //
@@ -377,9 +380,11 @@ fn test_ordminhash_01seq() {
     //
     log::info!("in test_ordminhash_01seq");
     //
-    let (v1, v2) =  gen_01seq(3, 10);
+    let (v1, v2) =  gen_01seq(3, 100);
 
+    test_vectors(1024, 1, &v1, &v2, 1000);
     test_vectors(1024, 3, &v1, &v2, 1000);
+    test_vectors(1024, 5, &v1, &v2, 1000);
 }
 
 
@@ -446,8 +451,6 @@ fn test_ordminhash2_p2() {
     //
     let nb_iter = 100000;
 
-//    test_vectors(32, 1, &pattern.0, &pattern.1, nb_iter);
-
     //  pattern2 m = 32, l = 3
     //  0 0 7 23 103 347 1022 2415 4579 7443 10728 13314 14353 13844 11563 8556 5604 3207 1714 732 292 101 41 8 4 0 0 0 0 0 0 0 0
     //
@@ -477,10 +480,6 @@ fn test_ordminhash2_p3() {
     let pattern = get_pattern_3();
     //
     let nb_iter = 100000;
-
-    log::info!("\n m : 1024, l : 3");
-    test_vectors(1024, 3, &pattern.0, &pattern.1, nb_iter);
-
 
 
     /* Ertl pattern 3 m = 32, l = 3
@@ -518,12 +517,22 @@ fn test_ordminhash2_p5() {
     log_init_test();
     log::info!("in test_ordminhash2_dist_5");
     //
-    let size: usize = 25;
-    let v1 = (0..size).into_iter().map(|i| i as u32).collect::<Vec<u32>>();
-    let v2 = (0..size).into_iter().map(|i| (i + 5) as u32).collect::<Vec<u32>>();
-
     let nbiter = 100000;
+    //
+    let size: usize = 25;
+    let shift = 5;
+    let v1 = (0..size).into_iter().map(|i| i as u32).collect::<Vec<u32>>();
+    let v2 = (0..size).into_iter().map(|i| (i + shift) as u32).collect::<Vec<u32>>();
+
+    log::info!("shift : {}", shift);
     test_vectors(4, 2, &v1, &v2, nbiter);
+
+    let shift = 9;
+    log::info!("shift : {}", shift);
+    let v1 = (0..size).into_iter().map(|i| i as u32).collect::<Vec<u32>>();
+    let v2 = (0..size).into_iter().map(|i| (i + shift) as u32).collect::<Vec<u32>>();
+    test_vectors(4, 2, &v1, &v2, nbiter);
+
 
 } // end of test_ordminhash2_dist_p5
 
