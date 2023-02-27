@@ -95,6 +95,8 @@ pub struct SuperMinHash<'a, T: Hash, H: 'a + Hasher+Default> {
     b:Vec<i64>,
     /// rank of item hashed . Necessary for the streaming case if sketch_slice is called several times iteratively
     item_rank:usize,
+    ///
+    a_upper : usize,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: &'a BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -124,7 +126,7 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
         }
         b_init[size-1] = size as i64;
         //
-        SuperMinHash{hsketch: sketch_init, q: q_init, p: p_init, b: b_init, item_rank: 0,
+        SuperMinHash{hsketch: sketch_init, q: q_init, p: p_init, b: b_init, item_rank: 0, a_upper : size - 1,
                      b_hasher: build_hasher, t_marker : PhantomData,}
     }  // end of new
 
@@ -143,6 +145,7 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
         }
         self.b[size-1] = size as i64;
         self.item_rank = 0;
+        self.a_upper = size-1;
     }
 
     /// returns a reference to computed sketches
@@ -171,7 +174,6 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
     /// It can be used in streaming to update current sketch
     pub fn sketch(&mut self, to_sketch : &T) -> Result <(),()> {
         let m = self.hsketch.len();
-        let mut a_upper = m - 1;
         let unit_range = Uniform::<f64>::new(0., 1.);
         //
         // hash! even if with NoHashHasher. In this case T must be u64 or u32
@@ -187,7 +189,7 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
         //
         let mut j:usize = 0;
         let irank = (self.item_rank) as i64;
-        while j <= a_upper {
+        while j <= self.a_upper {
             let r:f64 = unit_range.sample(&mut rand_generator);
             let k = Uniform::<usize>::new(j, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
             //
@@ -213,8 +215,8 @@ impl <'a, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,T, H> {
                     // we can decrease counter of upper parts of b and update upper
                     self.b[j_2] = self.b[j_2]-1;
                     self.b[j] += 1;
-                    while self.b[a_upper] == 0 {
-                        a_upper = a_upper - 1;
+                    while self.b[self.a_upper] == 0 {
+                        self.a_upper = self.a_upper - 1;
                     } // end if j < j_2
                 } // end update a_upper
             } // end if r+j < ...
