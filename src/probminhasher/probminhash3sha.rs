@@ -10,11 +10,12 @@
 //! The hash value is computed on 256 bits and the random generator is initilized with a full 256 bits value
 //! reducing collisions. 
 //! This implementation uses Sha512_256 hashing for initialization the random generator (Xoshiro256PlusPlus) with 256 bits seed and
-//! reduces the risk of collisions. 
+//! reduces the risk of collisions.  
+//! 
 //! Counted objects must satisfy the trait Sig (instead of **Hash** for the preceding algorithms), 
 //! so that it can be fed into Sha update methods and thus do not need to satisfy Copy.
 //! 
-//! It is more adapted to hashing Strings or Vec<u8>  
+//! It is more adapted to hashing Strings or Vec\<u8\>  
 //! 
 //! If this is not a requirement the Probminhash3 module is a solution.
 //!  

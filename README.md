@@ -6,7 +6,7 @@ It implements:
 
 * ProbMinHash2, ProbMinHash3 and ProbMinHash3a as described in O. Ertl paper:
 **ProbMinHash. A Class of of Locality-Sensitive Hash Algorithms for the Probability Jaccard Similarity (2020)**
-[probminhash Ertl](https://arxiv.org/abs/1911.00675).
+[probminhash Ertl](https://arxiv.org/abs/1911.00675) or [IEEE-2022](https://ieeexplore.ieee.org/document/9185081)
 
 These algorithms compute an estimation of the Jaccard weighted index via sensitive hashing.
 It is an extension of the Jaccard index to the case where objects have a weight, or a multiplicity associated.  
@@ -28,6 +28,9 @@ The hash values are computed by the *sketch* method or can be computed before en
 In this case (pre-hashed values) the structure just computes permutation according to the paper.
 
 It runs in one pass on data so it can be used in streaming.
+
+* ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  
+It is inspired by *Marcais.G et al. BioInformatics 2019*, see  [Marcais](https://academic.oup.com/bioinformatics/article/35/14/i127/5529166)
 
 * Invhash
   

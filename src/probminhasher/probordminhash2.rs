@@ -4,7 +4,7 @@
 //! Marcais.G et al. BioInformatics 2019
 //! and 
 //! Ertl.O ProbMinHash , A Class Of Locality Sensitive Hash Probability Jaccard Similarity
-//! IEEE transactions on knowledge and data engineering 2022 or [https://arxiv.org/abs/1911.00675]
+//! IEEE transactions on knowledge and data engineering 2022 or <https://arxiv.org/abs/1911.00675>
 //! 
 //! This is a Rust reimplementation  Ertl.O code
 //! 
@@ -216,7 +216,7 @@ impl <H> ProbOrdMinHash2<H>
     } // end new
 
 
-    /// hash a full batch of data and return a signature as Vec<u64> of size m.
+    /// hash a full batch of data and return a signature as Vec\<u64\> of size m.
     /// All internal data are cleared at each new call, so the structure ProbOrdMinHash2 can be reused.
     pub fn hash_set<D:Eq+Hash>(&mut self, data : &[D]) -> Vec<u64> {
         // check size
