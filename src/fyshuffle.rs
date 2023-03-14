@@ -39,8 +39,7 @@ impl FYshuffle {
         // sample between self.lastidx (included) and self.m (excluded)
         let idx = self.lastidx + (xsi * (self.m - self.lastidx) as f64) as usize;
         let val = self.v[idx];
-        self.v[idx] = self.v[self.lastidx];
-        self.v[self.lastidx] = val;
+        self.v.swap(idx, self.lastidx);
         self.lastidx += 1;
         val
     }

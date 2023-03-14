@@ -1,8 +1,10 @@
-//! An implementation of Superminhash from:    
+//! An implementation of SuperMinHash2 from:    
 //! A new minwise Hashing Algorithm for Jaccard Similarity Estimation.  
-//!  Otmar Ertl (2017-2018) <https://arxiv.org/abs/1706.05698>
+//!  Otmar Ertl (2017-2018) <https://arxiv.org/abs/1706.05698>.  
+//! This version corresponds to the second implementation or Ertl as given in [probminhash](https://github.com/oertl/probminhash).
+//! It is as fast as the first version in [super::SuperMinHasher] and returns sketch as u32 u64 which is more adapted to Hamming distane
 //!
-//! The hash values can be computed before entering SuperMinHash methods
+//! The hash values can be computed before entering SuperMinHash2 methods
 //! so that the structure just computes permutation according to the paper
 //! or hashing can be delegated to the sketching method.  
 //! In the first case, the build_hasher should be parametrized by NoHashHasher
@@ -14,16 +16,16 @@
 
 use log::trace;
 
-use std::{cmp};
+// use std::{cmp};
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
 use rand::distributions::*;
-use rand_distr::uniform::SampleUniform;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use num::{Float};
+use num::{Integer, ToPrimitive, NumCast, Unsigned};
 
+use crate::fyshuffle::*;
 
 #[allow(unused_imports)]
 use crate::invhash;
@@ -48,21 +50,21 @@ impl Hasher for NoHashHasher {
         match bytes.len() {
             4 => {
                 *self = NoHashHasher(
-                    ((bytes[0] as u64) << 24) +
-                        ((bytes[1] as u64) << 16) +
-                        ((bytes[2] as u64) << 8) +
+                    ((bytes[0] as u64) << 24) |
+                        ((bytes[1] as u64) << 16) |
+                        ((bytes[2] as u64) << 8) |
                         (bytes[3] as u64));
             },
             
             8 => {
                 *self = NoHashHasher(
-                    ((bytes[0] as u64) << 56) +
-                        ((bytes[1] as u64) << 48) +
-                        ((bytes[2] as u64) << 40) +
-                        ((bytes[3] as u64) << 32) +
-                        ((bytes[4] as u64) << 24) +
-                        ((bytes[5] as u64) << 16) +
-                        ((bytes[6] as u64) << 8) +                       
+                    ((bytes[0] as u64) << 56) |
+                        ((bytes[1] as u64) << 48) |
+                        ((bytes[2] as u64) << 40) |
+                        ((bytes[3] as u64) << 32) |
+                        ((bytes[4] as u64) << 24) |
+                        ((bytes[5] as u64) << 16) |
+                        ((bytes[6] as u64) << 8) |                       
                         (bytes[7] as u64));
             },
             
@@ -73,93 +75,101 @@ impl Hasher for NoHashHasher {
     fn finish(&self) -> u64 { self.0 }
 }
 
-/// An implementation of Superminhash
+
+
+/// An implementation of SuperMinHash2
 /// A new minwise Hashing Algorithm for Jaccard Similarity Estimation
 ///  Otmar Ertl 2017-2018 arXiv <https://arxiv.org/abs/1706.05698>
 /// 
 /// The hash strategy can be chosen by specializing the H type 
 /// to Fnv (fast when hashing small values as integer according to documentation),
 /// of fxhash or any hasher chosen by the user.  
-/// The hash values can also be computed before entering SuperMinHash methods
+/// The hash values can also be computed before entering SuperMinHash2 methods
 /// so that the structure  computes just the specific minhash part of the algorithm.
 /// In this second case, the build_hasher should be parametrized by NoHashHasher
-/// (as in finch module).   
 /// 
-/// The signature is a Vec\<F\> where F is f32 or f64
+/// The signature is a Vec\<I\> where I is u32 or u64
+/// To get a u32 signature, a Hasher into 32 bit value must be used, see (fxhash32or)[https://crates.io/crates/twox-hash] or (xxhash32)[https://crates.io/crates/fxhash]
 /// 
 /// It runs in one pass on data so it can be used in streaming
 
-pub struct SuperMinHash<'a, F: Float, T: Hash, H: 'a + Hasher+Default> {
-    /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
-    hsketch:Vec<F>,
+pub struct SuperMinHash2<'a, I: Integer, T: Hash, H: 'a + Hasher+Default> {
+    /// 
+    hsketch:Vec<I>,
     /// initialization marker
-    q:Vec<i64>,
-    /// permutation vector
-    p:Vec<usize>,
+    values :Vec<usize>,
+    /// 
+    l:Vec<usize>,
     /// to store the current max of current signature value
-    b:Vec<i64>,
+    b:Vec<usize>,
     /// rank of item hashed . Necessary for the streaming case if sketch_slice is called several times iteratively
     item_rank:usize,
     ///
     a_upper : usize,
+    /// random permutation generator
+    permut_generator : FYshuffle,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: &'a BuildHasherDefault<H>,
     /// just to mark the type we sketch
     t_marker: PhantomData<T>,
-}  // end of struct SuperMinHash
+    //
+    f_marker: PhantomData<I>,
+}  // end of struct SuperMinHash2
 
 
 
-impl <'a, F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,F, T, H> {
-    /// allocate a struct to do superminhash.
+impl <'a, I, T, H : 'a + Hasher+Default> SuperMinHash2<'a,I, T, H> 
+    where   I: Integer + Unsigned + ToPrimitive + NumCast  + Copy + Clone + Send + Sync + std::fmt::Debug, 
+            T:Hash {
+    /// allocate a struct to do SuperMinHash2.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
-    pub fn new(size:usize, build_hasher: &'a BuildHasherDefault<H>) -> SuperMinHash<'a, F, T, H> {
+    pub fn new(size:usize, build_hasher: &'a BuildHasherDefault<H>) -> SuperMinHash2<'a, I, T, H> {
         //
-        let mut sketch_init = Vec::<F>::with_capacity(size);
-        let mut q_init = Vec::<i64>::with_capacity(size);
-        let mut p_init = Vec::<usize>::with_capacity(size);
-        let mut b_init = Vec::<i64>::with_capacity(size);
+        log::info!("\n allocating-sketcher \n");
+        //
+        let size_i = std::mem::size_of::<I>();
+        assert!(size_i >= 4, "hash values should have at least 4 bytes,so u32 or u64"); // at least u32
+        //
+        let sketch_init: Vec<I> = (0..size).into_iter().map(|_| I::zero()).collect();
         // we initialize sketches by something large.
         // If we initialize by f64::MAX we got a bug beccause f64::MAX as usize is 0! in cmp::min(skect, m-1) in j_2 line 216
         // computation in sketch_batch. 
-        let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
-        for _i in 0..size {
-            sketch_init.push(large);
-            q_init.push(-1);
-            p_init.push(0);
-            b_init.push(0);
-        }
-        b_init[size-1] = size as i64;
+        let values: Vec<usize> = (0..size).into_iter().map(|_| usize::MAX).collect();
+        let l : Vec<usize> = (0..size).into_iter().map(|_|  size - 1).collect();
+        let mut b : Vec<usize> = (0..size).into_iter().map(|_| 0).collect();
+        b[size-1] = size;
+        let permut_generator = FYshuffle::new(size);
         //
-        SuperMinHash{hsketch: sketch_init, q: q_init, p: p_init, b: b_init, item_rank: 0, a_upper : size - 1,
-                     b_hasher: build_hasher, t_marker : PhantomData,}
+        SuperMinHash2{hsketch: sketch_init, values, l , b, item_rank: 0, a_upper : size - 1,
+                    permut_generator,  
+                    b_hasher: build_hasher, t_marker : PhantomData, f_marker : PhantomData}
     }  // end of new
 
 
     /// Reinitialize minhasher, keeping size of sketches.  
-    /// SuperMinHash can then be reinitialized and used again with sketch_slice.
+    /// SuperMinHash2 can then be reinitialized and used again with sketch_slice.
     /// This methods puts an end to a streaming sketching of data and resets all counters.
     pub fn reinit(&mut self) {
         let size = self.hsketch.len();
-        let large:F = F::from(u32::MAX).unwrap();
-        for i in 0..size {
-            self.hsketch[i] = large;
-            self.q[i] = -1;
-            self.p[i] = 0;
-            self.b[i] = 0;
-        }
-        self.b[size-1] = size as i64;
+        //
+        self.values.fill(usize::MAX);
+        self.l.fill(size - 1);
+        self.b.fill(0);
+        self.b[size-1] = size;
+        //
+        self.hsketch.fill(I::zero());
         self.item_rank = 0;
         self.a_upper = size-1;
+        self.permut_generator.reset();
     }
 
     /// returns a reference to computed sketches
-    pub fn get_hsketch(&self) -> &Vec<F> {
+    pub fn get_hsketch(&self) -> &Vec<I> {
         return &self.hsketch;
     }
 
     /// returns an estimator of jaccard index between the sketch in this structure and the sketch passed as arg
-    pub fn get_jaccard_index_estimate(&self, other_sketch : &Vec<F>)  -> Result<f64, ()> {
+    pub fn get_jaccard_index_estimate(&self, other_sketch : &Vec<I>)  -> Result<f64, ()> {
         if other_sketch.len() != self.hsketch.len() {
             return Err(());
         }
@@ -178,55 +188,50 @@ impl <'a, F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : 'a + Hasher+
     /// Insert an item in the set to sketch.  
     /// It can be used in streaming to update current sketch
     pub fn sketch(&mut self, to_sketch : &T) -> Result <(),()> {
-        let m = self.hsketch.len();
-        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
         //
         // hash! even if with NoHashHasher. In this case T must be u64 or u32
         let mut hasher = self.b_hasher.build_hasher();
         to_sketch.hash(&mut hasher);
-        let hval1 : u64 = hasher.finish();
+        let hval_64 : u64 = hasher.finish();
+        let hval_i =  num::NumCast::from::<u64>(hval_64).unwrap();
+    //    let hval_i = I::from_u64(hval_64 & I::max_value()).unwrap() as u64;
         // Then initialize random numbers generators with seedxor,
         // we have one random generator for each element to sketch
         // In probminhash we imposed T to verifiy Into<usize>. We have to be coherent..
-        let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
-//        trace!("sketch hval1 :  {:?} ",hval1); // needs T : Debug
+        let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval_64);
+ //       let mut rand_generator = wyhash::WyRng::seed_from_u64(hval_64);
+        self.permut_generator.reset();
+        //
         log::trace!("item-rank : {}", self.item_rank);
+//        trace!("sketch hval1 :  {:?} ",hval1); // needs T : Debug
         //
         let mut j:usize = 0;
-        let irank = (self.item_rank) as i64;
         while j <= self.a_upper {
-            let r:F = unit_range.sample(&mut rand_generator);
-            let k = Uniform::<usize>::new(j, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
+            let r : usize =  rand_generator.sample(Standard);
+            let k = self.permut_generator.next(&mut rand_generator);
             //
-            log::trace!("before : j {} k {} self.p[k] {}, upper : {}", j , k , self.p[k], self.a_upper);
-            //
-            if self.q[j] != irank {
-                self.q[j] = irank;
-                self.p[j] = j;
-            }
-            if self.q[k] != irank {
-                self.q[k] = irank;
-                self.p[k] = k;
-            }
-            self.p.swap(j,k);
-            //
+            log::trace!("before: j {} k {} l[k] {}, upper : {}", j , k , self.l[k], self.a_upper);
             // update hsketch and counters
-            let rpj = r+ (F::from(j).unwrap());
-            if rpj  < self.hsketch[self.p[j]]  {
-                // update of signature of rank j
-                let j_2 = cmp::min(self.hsketch[self.p[j]].to_usize().unwrap(), m-1);
-                self.hsketch[self.p[j]] = rpj;
-                if j < j_2 {
-                    // we can decrease counter of upper parts of b and update upper
-                    self.b[j_2] = self.b[j_2]-1;
+            if self.l[k] >= j {
+                if self.l[k] == j {
+                    if  r <= self.values[k] {
+                        self.values[k] = r;
+                        self.hsketch[k] = hval_i;
+                    }
+                }
+                else {
+                    self.b[self.l[k]] -=1;
                     self.b[j] += 1;
                     while self.b[self.a_upper] == 0 {
                         self.a_upper = self.a_upper - 1;
-                    } // end if j < j_2
-                } // end update a_upper
-            } // end if r+j < ...
+                    }
+                    self.l[k] = j;
+                    self.values[k] = r;
+                    self.hsketch[k] = hval_i;
+                }
+            }
+            log::trace!("after : j {} k {} l[k] {}, upper : {}", j , k , self.l[k], self.a_upper);
             j+=1;
-            log::trace!("after : j {} k {} self.p[k] {}, upper : {}", j , k , self.p[k], self.a_upper);
         } // end of while on j <= upper
         self.item_rank +=1;            
         //
@@ -252,7 +257,7 @@ impl <'a, F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : 'a + Hasher+
     } // end of sketch_batch
 
 
-} // end of impl SuperMinHash
+} // end of impl SuperMinHash2
 
 
 //===============================================================================================
@@ -260,12 +265,12 @@ impl <'a, F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : 'a + Hasher+
 
 
 /// Returns an estimator of jaccard index between 2 sketches coming from the same
-/// SuperMinHash struct (using reinit for example) or two SuperMinHash struct initialized with same Hasher parameters.
+/// SuperMinHash2 struct (using reinit for example) or two SuperMinHash2 struct initialized with same Hasher parameters.
 /// with the same number of hash signatures.  
 ///   
 /// Note that if *jp* is the returned value of this function,  
 /// the distance between siga and sigb, associated to the jaccard index is *1.- jp* 
-pub fn compute_superminhash_jaccard<F:Float + std::fmt::Debug>(hsketch: &Vec<F>  , other_sketch: &Vec<F>)  -> Result<F, ()> {
+pub fn compute_superminhash_jaccard<F: PartialEq + num::Zero + std::fmt::Debug>(hsketch: &Vec<F>  , other_sketch: &Vec<F>)  -> Result<f32, ()> {
     if hsketch.len() != other_sketch.len() {
         return Err(());
     }
@@ -276,14 +281,14 @@ pub fn compute_superminhash_jaccard<F:Float + std::fmt::Debug>(hsketch: &Vec<F> 
             count += 1;
         }             
     }
-    return Ok(F::from(count).unwrap()/F::from(other_sketch.len()).unwrap());
+    return Ok(count as f32/other_sketch.len() as f32);
 }  // end of get_jaccard_index_estimate
 
 
 
 /// just an alias for backward compatibility
 #[inline]
-pub fn get_jaccard_index_estimate<F: Float + std::fmt::Debug>(hsketch: &Vec<F>  , other_sketch: &Vec<F>)  -> Result<F, ()>  {
+pub fn get_jaccard_index_estimate<F: PartialEq + num::Zero + std::fmt::Debug>(hsketch: &Vec<F>  , other_sketch: &Vec<F>)  -> Result<f32, ()>  {
     return compute_superminhash_jaccard::<F>(hsketch, other_sketch);
 }
 
@@ -295,7 +300,7 @@ pub fn get_jaccard_index_estimate<F: Float + std::fmt::Debug>(hsketch: &Vec<F>  
 mod tests {
     use super::*;
     use fnv::FnvHasher;
-
+    use twox_hash::{XxHash32};
 
     #[allow(dead_code)]
     fn log_init_test() {
@@ -306,12 +311,12 @@ mod tests {
     fn test_build_hasher() {
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let _new_hasher = bh.build_hasher();
-        let _sminhash : SuperMinHash<f64, u64, FnvHasher>= SuperMinHash::new(10, &bh);
+        let _sminhash : SuperMinHash2<u64, u64, FnvHasher>= SuperMinHash2::new(10, &bh);
     }  // end of test_build_hasher
 
 
     #[test]
-    fn test_range_intersection_fnv_f64() {
+    fn test_range_intersection_fnv_u64() {
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
@@ -320,7 +325,7 @@ mod tests {
         let vb : Vec<usize> = (900..2000).collect();
         let size = 100;
         let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : SuperMinHash<f64, usize, FnvHasher>= SuperMinHash::new(size, &bh);
+        let mut sminhash : SuperMinHash2<u64, usize, FnvHasher>= SuperMinHash2::new(size, &bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -339,23 +344,23 @@ mod tests {
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
         let jexact = 0.05;
         let sigma = 1. / (size as f32).sqrt();
-        log::info!(" jaccard estimate {jacfmt:.2}, j exact : {jexactfmt:.2} ", jacfmt=jac, jexactfmt=jexact);
+        println!(" jaccard estimate {jacfmt:.2}, j exact : {jexactfmt:.2} ", jacfmt=jac, jexactfmt=jexact);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac as f32) < jexact + sigma);
+       assert!( jac > 0. && jac < jexact + sigma);
     } // end of test_range_intersection_fnv_f64
 
 
 #[test]
-    fn test_range_intersection_fnv_f32() {
+    fn test_range_intersection_fnv_u32() {
         //
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..2000).collect();
-        let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : SuperMinHash<f32, usize, FnvHasher>= SuperMinHash::new(70, &bh);
+        let va : Vec<u64> = (0..1000).collect();
+        let vb : Vec<u64> = (900..2000).collect();
+        let bh = BuildHasherDefault::<XxHash32>::default();
+        let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(70000, &bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -371,18 +376,21 @@ mod tests {
         }
         let skb = sminhash.get_hsketch();
         //
+        log::debug!("ska : {:?}", ska);
+        log::debug!("skb : {:?}", skb);
+        //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
         let jexact = 0.05;
-        println!(" jaccard estimate {jacfmt:.2}, j exact : {jexactfmt:.2} ", jacfmt=jac, jexactfmt=jexact);
+        println!(" jaccard estimate {jacfmt:.2e}, j exact : {jexactfmt:.2e} ", jacfmt=jac, jexactfmt=jexact);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-       assert!( jac > 0.);
+       assert!( jac > 0. && jac < 0.1);
     } // end of test_range_intersection_fnv_f32
 
 
     
     // the following tests when data are already hashed data and we use NoHashHasher inside minhash
     #[test]
-    fn test_range_intersection_already_hashed_f64() {
+    fn test_range_intersection_already_hashed_u64() {
         log_init_test();
         //  It seems that the log initialization in only one test is sufficient (and more cause a bug).
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
@@ -391,9 +399,9 @@ mod tests {
         let va : Vec<u64> = (0..1000).map(|x| invhash::int64_hash(x)).collect();
         let vb : Vec<u64> = (900..2000).map(|x| invhash::int64_hash(x)).collect();
         // real minhash work now
-        let size = 70;
+        let size = 500;
         let bh = BuildHasherDefault::<NoHashHasher>::default();
-        let mut sminhash : SuperMinHash<f64, u64, NoHashHasher>= SuperMinHash::new(size, &bh);
+        let mut sminhash : SuperMinHash2<u64, u64, NoHashHasher>= SuperMinHash2::new(size, &bh);
         // now compute sketches
         trace!("sketching a ");
         let resa = sminhash.sketch_slice(&va);
@@ -413,48 +421,12 @@ mod tests {
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
         let jexact = 0.05;
+        let sigma = 1./ (size as f32).sqrt();
         println!(" jaccard estimate : {}  exact value : {} ", jac, jexact);
         // we have 100 common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         // J theo : 0.05
-        assert!(jac > 0.);
+        assert!(jac > 0. && jac < jexact + sigma);
     } // end of test_range_intersection_already_hashed_f64
     
 
-    #[test]
-    fn test_range_intersection_already_hashed_f32() {
-        log_init_test();
-        //  It seems that the log initialization in only one test is sufficient (and more cause a bug).
-        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
-        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
-        //
-        let va : Vec<u64> = (0..1000).map(|x| invhash::int64_hash(x)).collect();
-        let vb : Vec<u64> = (900..2000).map(|x| invhash::int64_hash(x)).collect();
-        // real minhash work now
-        let bh = BuildHasherDefault::<NoHashHasher>::default();
-        let mut sminhash : SuperMinHash<f32, u64, NoHashHasher>= SuperMinHash::new(50, &bh);
-        // now compute sketches
-        trace!("sketching a ");
-        let resa = sminhash.sketch_slice(&va);
-        if !resa.is_ok() {
-            println!("error in sketcing va");
-            return;
-        }
-        let ska = sminhash.get_hsketch().clone();
-        sminhash.reinit();
-        trace!("\n \n sketching b ");
-        let resb = sminhash.sketch_slice(&vb);
-        if !resb.is_ok() {
-            println!("error in sketching vb");
-            return;
-        }
-        let skb = sminhash.get_hsketch();
-        //
-        let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let jexact = 0.05;
-        println!(" jaccard estimate : {}  exact value : {} ", jac, jexact);
-        // we have 100 common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        // J theo : 0.05
-        assert!(jac > 0.);
-    } // end of test_range_intersection_already_hashed_f32
-} // end of module test
-
+}

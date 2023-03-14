@@ -15,6 +15,8 @@ pub mod jaccard;
 pub mod probminhasher;
 
 pub mod superminhasher;
+pub mod superminhasher2;
+
 pub mod invhash;
 pub mod nohasher;
 
