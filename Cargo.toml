@@ -1,6 +1,6 @@
 [package]
 name = "probminhash"
-version = "0.1.7"
+version = "0.1.8"
 authors = ["jeanpierre.both@gmail.com"]
 repository = "https://github.com/jean-pierreBoth/probminhash"
 documentation = "https://docs.rs/probminhash"
@@ -38,6 +38,7 @@ rand_xorshift = {version = "0.3"}
 rand_xoshiro = {version = "0.6"}
 sha2 = {version = "0.10"}
 wyhash = {version = "0.5"}
+twox-hash = {version = "1.6"}
 
 fxhash = { version= "0.2"}
 indexmap = { version = "1.9"}
