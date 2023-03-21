@@ -29,6 +29,14 @@ In this case (pre-hashed values) the structure just computes permutation accordi
 
 It runs in one pass on data so it can be used in streaming.
 
+* SetSketch  
+  
+An implementation of the SetSketch :
+**SetSketch: Filling the gap between MinHash and HyperLogLog**
+Otmar Ertl [arxiv](https://arxiv.org/abs/2101.00314) or [vldb](https://vldb.org/pvldb/vol14/p2244-ertl.pdf)
+
+This algorithm runs on unweighted objects.
+
 * ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  
 It is inspired by *Marcais.G et al. BioInformatics 2019*, see  [Marcais](https://academic.oup.com/bioinformatics/article/35/14/i127/5529166)
 

@@ -46,6 +46,12 @@ fnv = {version= "1.0"}
 
 lazy_static = { version = "1.4"}
 
+# serialization of setsketch params
+serde= {version = "1.0", features = ["derive"] }
+serde_json= {version = "1.0"}
+
+# for doc
+katexit = {version = "0.1"}
 
 
 # decreasing order of log for debug build : (max_level_)trace debug info warn error off

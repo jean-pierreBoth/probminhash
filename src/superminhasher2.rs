@@ -2,7 +2,7 @@
 //! A new minwise Hashing Algorithm for Jaccard Similarity Estimation.  
 //!  Otmar Ertl (2017-2018) <https://arxiv.org/abs/1706.05698>.  
 //! This version corresponds to the second implementation or Ertl as given in [probminhash](https://github.com/oertl/probminhash).
-//! It is as fast as the first version in [super::SuperMinHasher] and returns sketch as u32 u64 which is more adapted to Hamming distane
+//! It is as fast as the first version in [super::superminhasher::SuperMinHash] and returns sketch as u32 u64 which is more adapted to Hamming distane
 //!
 //! The hash values can be computed before entering SuperMinHash2 methods
 //! so that the structure just computes permutation according to the paper
@@ -89,7 +89,7 @@ impl Hasher for NoHashHasher {
 /// In this second case, the build_hasher should be parametrized by NoHashHasher
 /// 
 /// The signature is a Vec\<I\> where I is u32 or u64
-/// To get a u32 signature, a Hasher into 32 bit value must be used, see (fxhash32or)[https://crates.io/crates/twox-hash] or (xxhash32)[https://crates.io/crates/fxhash]
+/// To get a u32 signature, a Hasher into 32 bit value must be used, see (fxhash32or)<https://crates.io/crates/twox-hash> or (xxhash32)<https://crates.io/crates/fxhash>
 /// 
 /// It runs in one pass on data so it can be used in streaming
 
@@ -323,7 +323,10 @@ mod tests {
         //
         let va : Vec<usize> = (0..1000).collect();
         let vb : Vec<usize> = (900..2000).collect();
+        let inter = 100;
+        let jexact = inter as f32 / 2000.;
         let size = 100;
+        //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : SuperMinHash2<u64, usize, FnvHasher>= SuperMinHash2::new(size, &bh);
         // now compute sketches
@@ -342,11 +345,10 @@ mod tests {
         let skb = sminhash.get_hsketch();
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let jexact = 0.05;
-        let sigma = 1. / (size as f32).sqrt();
-        println!(" jaccard estimate {jacfmt:.2}, j exact : {jexactfmt:.2} ", jacfmt=jac, jexactfmt=jexact);
+        let sigma = (jac * (1. - jac) / size as f32).sqrt();
+        println!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3} ", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-       assert!( jac > 0. && jac < jexact + sigma);
+        assert!( jac > 0. && jac < jexact + 3. * sigma);
     } // end of test_range_intersection_fnv_f64
 
 
@@ -359,8 +361,13 @@ mod tests {
         //
         let va : Vec<u64> = (0..1000).collect();
         let vb : Vec<u64> = (900..2000).collect();
+        //
+        let inter = 100;
+        let jexact = inter as f32 / 2000.;
+        let size = 70000;
+        //
         let bh = BuildHasherDefault::<XxHash32>::default();
-        let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(70000, &bh);
+        let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(size, &bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -380,10 +387,10 @@ mod tests {
         log::debug!("skb : {:?}", skb);
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let jexact = 0.05;
-        println!(" jaccard estimate {jacfmt:.2e}, j exact : {jexactfmt:.2e} ", jacfmt=jac, jexactfmt=jexact);
+        let sigma = (jac * (1. - jac) / size as f32).sqrt();
+        println!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-       assert!( jac > 0. && jac < 0.1);
+        assert!( jac > 0. && jac < jexact + 3. * sigma);
     } // end of test_range_intersection_fnv_f32
 
 
@@ -399,6 +406,8 @@ mod tests {
         let va : Vec<u64> = (0..1000).map(|x| invhash::int64_hash(x)).collect();
         let vb : Vec<u64> = (900..2000).map(|x| invhash::int64_hash(x)).collect();
         // real minhash work now
+        let inter = 100;
+        let jexact = inter as f32 / 2000.;
         let size = 500;
         let bh = BuildHasherDefault::<NoHashHasher>::default();
         let mut sminhash : SuperMinHash2<u64, u64, NoHashHasher>= SuperMinHash2::new(size, &bh);
@@ -420,12 +429,11 @@ mod tests {
         let skb = sminhash.get_hsketch();
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let jexact = 0.05;
-        let sigma = 1./ (size as f32).sqrt();
-        println!(" jaccard estimate : {}  exact value : {} ", jac, jexact);
+        let sigma = (jac * (1. - jac) / size as f32).sqrt();
+        println!(" jaccard estimate : {:.3e}  exact value : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
         // we have 100 common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         // J theo : 0.05
-        assert!(jac > 0. && jac < jexact + sigma);
+        assert!(jac > 0. && jac < jexact + 3. * sigma);
     } // end of test_range_intersection_already_hashed_f64
     
 

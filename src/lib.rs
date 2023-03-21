@@ -15,7 +15,10 @@ pub mod jaccard;
 pub mod probminhasher;
 
 pub mod superminhasher;
-pub mod superminhasher2;
+pub mod setsketcher;
+
+// We have it but do not use it
+// pub mod superminhasher2;
 
 pub mod invhash;
 pub mod nohasher;
