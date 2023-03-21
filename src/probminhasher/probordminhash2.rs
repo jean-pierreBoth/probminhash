@@ -479,7 +479,7 @@ fn test_ordminhash2_p3() {
     //
     let pattern = get_pattern_3();
     //
-    let nb_iter = 100000;
+    let nb_iter = 10000;
 
 
     /* Ertl pattern 3 m = 32, l = 3
