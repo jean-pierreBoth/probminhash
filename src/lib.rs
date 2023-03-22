@@ -17,8 +17,9 @@ pub mod probminhasher;
 pub mod superminhasher;
 pub mod setsketcher;
 
-// We have it but do not use it
-// pub mod superminhasher2;
+// we keep it in case. give integer signature but slower!
+#[cfg(feature="sminhash2")]
+pub mod superminhasher2;
 
 pub mod invhash;
 pub mod nohasher;

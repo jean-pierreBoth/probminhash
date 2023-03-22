@@ -9,11 +9,6 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Minhash algorithms for weighted Jaccard index"
 
-[features]
-
-# declare a feature with no dependancy to get some modulated debug print
-# to be run with cargo build --features verbose_1
-#verbose_1 = [ ]
 
 
 [lib]
@@ -59,3 +54,10 @@ katexit = {version = "0.1"}
 #log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 log = { version = "0.4"}
 env_logger = { version = "0.9"}
+
+
+[features]
+
+default = []
+
+sminhash2 = []

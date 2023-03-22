@@ -19,15 +19,16 @@ use crate::fyshuffle::*;
 
 #[cfg_attr(doc, katexit::katexit)]
 /// Parameters defining the Sketcher
-/// - choice of a : given $\epsilon$ a is chosen verifying  $$ a \ge  \frac{1}{\epsilon} * log(\frac{m}{b})  $$ so that the probability of any sketch value being  negative is less than $\epsil$
-/// ( lemma 4 of setsketch paper).  
+/// - choice of a : given $\epsilon$ a is chosen verifying  $$ a \ge  \frac{1}{\epsilon} * log(\frac{m}{b})  $$ so that the probability 
+///   of any sketch value being  negative is less than $\epsilon$
+/// *(lemma 4 of setsketch paper)*.  
 /// 
 /// 
 /// - choice of q:  if $$ q >=  log_{b} (\frac{m  n  a}{\epsilon})$$ then a sketch value is less than q+1 with proba less than $\epsilon$ up to n data to sketch.
-///  see lemma 5 of paper.  
+///  *(see lemma 5 of paper)*.  
 /// 
-/// m = 4096, b = 1.001,  a = 20 , q = $2^{16} -2 = 65534 $ guarantee to negative value in sketch with proba 8.28 10^-6 and probability of
-/// sketch value greater than q+1 with probability less than $2.93 \space 10^{-6} $
+/// m = 4096, b = 1.001,  a = 20 , q = $2^{16} -2 = 65534 $ guarantee the absence of negative value in sketch with proba $8.28 \space 10^{-6}$ and probability of
+/// sketch value greater than q+1 with probability less than $2.93 \space 10^{-6}$, and so the sketches can be represented by a u16!
 /// 
 ///    
 /// 
@@ -51,8 +52,11 @@ impl Default for SetSketchParams {
 
 
 impl SetSketchParams {
-    /// m is the number of sketch. b is a parameter in the interval ]1., 2.[, in fact near 1. is better.
-    /// a is a parameter to be adjusted to avoid negative values in sketchs and q is related to size in bits 
+    #[cfg_attr(doc, katexit::katexit)]
+    /// - m is the number of sketch. 
+    /// - b is a parameter in the interval ]1., 2.[, in fact near 1. is better.
+    /// - a is a parameter to be adjusted to reduce probability $\epsilon$ of having negative values in sketchs.
+    /// - q minimal size in bits of sketch values. related to m,a, and  $\epsilon$ 
     pub fn new(b : f64, m : u64, a : f64, q : u64) -> Self {
         SetSketchParams{b, m, a, q}
     }
@@ -75,6 +79,9 @@ impl SetSketchParams {
     }
 
     /// get bounds for J given parameters and first estimate for jaccard. Returns a 2-uple (lower, upper)
+    /// For the parameters choice the difference between lower and upper bound should be smaller than accepted error over the range of jaccard
+    /// needed by problem treated.  
+    /// For the default parameters the difference between lower and upper is less 0.5% of jaccard value.
     pub fn get_jaccard_bounds(&self, jac : f64) -> (f64, f64) {
         assert!( jac <= 1.);
         // we want to compute b^(D0 / 2m) with article notation.
@@ -145,13 +152,13 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
 
 
     /// allocate a new sketcher
-    pub fn new(params : SetSketchParams) -> Self {
+    pub fn new(params : SetSketchParams, b_hasher: BuildHasherDefault::<H>) -> Self {
         //
         let k_vec : Vec<I> = (0..params.get_m()).into_iter().map(|_| I::zero()).collect();
         //
         return SetSketcher::<I,T,H>{b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
             k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(params.get_m() as usize),
-            b_hasher: BuildHasherDefault::<H>::default(), t_marker : PhantomData};
+            b_hasher, t_marker : PhantomData};
     }
 
 
@@ -173,7 +180,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         let mut x_pred : f64 = 0.;
         for j in 0..self.m {
             //
-            let x_j = x_pred + (self.a as f64 / (self.m - j) as f64) * rng.sample::<f64, Exp1>(Exp1);  // use Ziggurat
+            let x_j = x_pred + (1. / (self.a * (self.m - j) as f64)) * rng.sample::<f64, Exp1>(Exp1);  // use Ziggurat
             x_pred = x_j;
             //
             let lb_xj =  x_j.ln()/lb;   // log base b of x_j
@@ -181,6 +188,8 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
             if lb_xj > - self.lower_k  {
                 break;
             } 
+            //
+            assert!((1. - lb_xj).floor() >= 0.);
             //
             let z : u64 = (self.q+1).min((1. - lb_xj).floor() as u64);
             log::debug!("j : {}, x_j : {:.5e} , lb_xj : {:.5e}, z : {:.5e}", j, x_j, lb_xj , z);
@@ -213,6 +222,11 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         return Ok(());
     }  // end of sketch
 
+    /// return an estimate of the lowest value of sketch
+    /// a null value is a diagnostic of bad skecthing
+    pub fn get_low_sketch(&self) -> i64 {
+        return self.lower_k.floor() as i64
+    }
 
     /// Arg to_sketch is an array ( a slice) of values to hash.
     /// It can be used in streaming to update current sketch
@@ -247,7 +261,14 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     pub fn get_signature(&self) -> &Vec<I> {
         return &self.k_vec;
     }
+
+    // in fact I prefer get_signature
+#[inline(always)]
+    pub fn get_hsketch(&self) -> &Vec<I> {
+        self.get_signature()
+    }
 } // end of impl SetSketch<F:
+
 
 
 //======================================================================================================
@@ -275,16 +296,17 @@ mod tests {
         //
         let nb_frac = 20;
 
-        for j in 0..nb_frac {
+        for j in 1..=nb_frac {
             let jac = (j as f64)/ (nb_frac as f64);
             let (jinf, jsup) = params.get_jaccard_bounds(jac);
-            log::info!("j = {},  jinf : {:.5e}, jsup = {:.5e}", jac, jinf, jsup);
+            let delta = 100. * (jsup - jinf) / jac;
+            log::info!("j = {},  jinf : {:.5e}, jsup = {:.5e}, delta% : {:.3}", jac, jinf, jsup, delta);
         }
     } // end of test_params_bounds
 
 
     #[test]
-    fn test_range_intersection_fnv_f32() {
+    fn test_range_inter1_hll_fnv_f32() {
         //
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
@@ -294,10 +316,11 @@ mod tests {
         let vb : Vec<usize> = (900..2000).collect();
         let inter = 100;  // intersection size
         let jexact = inter as f32 / 2000 as f32;
+        let nb_sketch = 2000;
         //
         let mut params = SetSketchParams::default();
-        params.set_m(700);
-        let mut sethasher : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params);
+        params.set_m(nb_sketch);
+        let mut sethasher : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default());
         // now compute sketches
         let resa = sethasher.sketch_slice(&va);
         if !resa.is_ok() {
@@ -305,7 +328,6 @@ mod tests {
             return;
         }
         let ska = sethasher.get_signature().clone();
-        log::debug!("ska = {:?}",ska);
         //
         sethasher.reinit();
         //
@@ -315,6 +337,8 @@ mod tests {
             return;
         }
         let skb = sethasher.get_signature();
+        //
+        log::debug!("ska = {:?}",ska);
         log::debug!("skb = {:?}",skb);
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
@@ -324,4 +348,50 @@ mod tests {
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
     }  // end of test_range_intersection_fnv_f32
 
+
+
+    // a test with very different size of slices
+    #[test]
+    fn test_range_inter2_hll_fnv_f32() {
+        //
+        log_init_test();
+        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
+        //
+        let vbmax = 20000;
+        let va : Vec<usize> = (0..1000).collect();
+        let vb : Vec<usize> = (900..vbmax).collect();
+        let inter = 100;  // intersection size
+        let jexact = inter as f32 / vbmax as f32;
+        let nb_sketch = 800;
+        //
+        let mut params = SetSketchParams::default();
+        params.set_m(nb_sketch);
+        let mut sethasher : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default());
+        // now compute sketches
+        let resa = sethasher.sketch_slice(&va);
+        if !resa.is_ok() {
+            println!("error in sketcing va");
+            return;
+        }
+        let ska = sethasher.get_signature().clone();
+        //
+        sethasher.reinit();
+        //
+        let resb = sethasher.sketch_slice(&vb);
+        if !resb.is_ok() {
+            println!("error in sketching vb");
+            return;
+        }
+        let skb = sethasher.get_signature();
+        //
+        log::debug!("ska = {:?}",ska);
+        log::debug!("skb = {:?}",skb);
+        //
+        let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
+        assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
+    }  // end of test_range_intersection_fnv_f32
 }  // end of mod tests
