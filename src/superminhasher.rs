@@ -89,7 +89,7 @@ impl Hasher for NoHashHasher {
 /// 
 /// It runs in one pass on data so it can be used in streaming
 
-pub struct SuperMinHash<'a, F: Float, T: Hash, H: 'a + Hasher+Default> {
+pub struct SuperMinHash<F: Float, T: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
     /// initialization marker
@@ -103,17 +103,17 @@ pub struct SuperMinHash<'a, F: Float, T: Hash, H: 'a + Hasher+Default> {
     ///
     a_upper : usize,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
-    b_hasher: &'a BuildHasherDefault<H>,
+    b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
     t_marker: PhantomData<T>,
 }  // end of struct SuperMinHash
 
 
 
-impl <'a, F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : 'a + Hasher+Default> SuperMinHash<'a,F, T, H> {
+impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : Hasher+Default> SuperMinHash<F, T, H> {
     /// allocate a struct to do superminhash.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
-    pub fn new(size:usize, build_hasher: &'a BuildHasherDefault<H>) -> SuperMinHash<'a, F, T, H> {
+    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> SuperMinHash<F, T, H> {
         //
         let mut sketch_init = Vec::<F>::with_capacity(size);
         let mut q_init = Vec::<i64>::with_capacity(size);
@@ -304,7 +304,7 @@ mod tests {
     fn test_build_hasher() {
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let _new_hasher = bh.build_hasher();
-        let _sminhash : SuperMinHash<f64, u64, FnvHasher>= SuperMinHash::new(10, &bh);
+        let _sminhash : SuperMinHash<f64, u64, FnvHasher>= SuperMinHash::new(10, bh);
     }  // end of test_build_hasher
 
 
@@ -321,7 +321,7 @@ mod tests {
         let size = 100;
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : SuperMinHash<f64, usize, FnvHasher>= SuperMinHash::new(size, &bh);
+        let mut sminhash : SuperMinHash<f64, usize, FnvHasher>= SuperMinHash::new(size, bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -359,7 +359,7 @@ mod tests {
         let size = 70;
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : SuperMinHash<f32, usize, FnvHasher>= SuperMinHash::new(size, &bh);
+        let mut sminhash : SuperMinHash<f32, usize, FnvHasher>= SuperMinHash::new(size, bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -399,7 +399,7 @@ mod tests {
         let jexact = inter as f32 / 2000.;
         let size = 70;
         let bh = BuildHasherDefault::<NoHashHasher>::default();
-        let mut sminhash : SuperMinHash<f64, u64, NoHashHasher>= SuperMinHash::new(size, &bh);
+        let mut sminhash : SuperMinHash<f64, u64, NoHashHasher>= SuperMinHash::new(size, bh);
         // now compute sketches
         trace!("sketching a ");
         let resa = sminhash.sketch_slice(&va);
@@ -442,7 +442,7 @@ mod tests {
         let size = 70;
         // real minhash work now
         let bh = BuildHasherDefault::<NoHashHasher>::default();
-        let mut sminhash : SuperMinHash<f32, u64, NoHashHasher>= SuperMinHash::new(50, &bh);
+        let mut sminhash : SuperMinHash<f32, u64, NoHashHasher>= SuperMinHash::new(50, bh);
         // now compute sketches
         trace!("sketching a ");
         let resa = sminhash.sketch_slice(&va);

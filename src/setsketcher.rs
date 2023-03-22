@@ -7,6 +7,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{to_writer};
 
+use std::fs::OpenOptions;
+use std::path::{Path};
+use std::io::{BufReader, BufWriter };
+
+
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
@@ -99,6 +104,49 @@ impl SetSketchParams {
         //
         return (jinf, jsup);
     }
+
+
+    pub fn dump_json(&self, dirpath: &Path) ->  Result<(), String> {
+        //
+        let filepath = dirpath.join("parameters.json");
+        //
+        log::info!("dumping SetSketchParams in json file : {:?}", filepath);
+        //
+        let fileres = OpenOptions::new().write(true).create(true).truncate(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("SetSketchParams dump : dump could not open file {:?}", filepath.as_os_str());
+            println!("SetSketchParams dump: could not open file {:?}", filepath.as_os_str());
+            return Err("SetSketchParams dump failed".to_string());
+        }
+        // 
+        let mut writer = BufWriter::new(fileres.unwrap());
+        let _ = to_writer(&mut writer, &self).unwrap();
+        //
+        Ok(())
+    } // end of dump_json
+
+
+
+    /// reload from a json dump. Used in request module to ensure coherence with database constitution
+    pub fn reload_json(dirpath : &Path) -> Result<Self, String> {
+        log::info!("in reload_json");
+        //
+        let filepath = dirpath.join("parameters.json");
+        let fileres = OpenOptions::new().read(true).open(&filepath);
+        if fileres.is_err() {
+            log::error!("SetSketchParams reload_json : reload could not open file {:?}", filepath.as_os_str());
+            println!("SetSketchParams reload_json: could not open file {:?}", filepath.as_os_str());
+            return Err("SetSketchParams reload_json could not open file".to_string());            
+        }
+        //
+        let loadfile = fileres.unwrap();
+        let reader = BufReader::new(loadfile);
+        let hll_parameters:Self = serde_json::from_reader(reader).unwrap();
+        //
+        Ok(hll_parameters)
+    } // end of reload_json
+
+
 } // end of impl SetSketchParams
 
 
@@ -123,6 +171,8 @@ pub struct SetSketcher<I : Integer, T, H:Hasher+Default> {
     nbmin : u64, 
     //
     permut_generator : FYshuffle,
+    //
+    nb_overflow : u64,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -139,7 +189,7 @@ impl <I, T, H> Default for SetSketcher<I, T, H >
         let m : usize = 4096;
         let k_vec : Vec<I> = (0..m).into_iter().map(|_| I::zero()).collect();
         return SetSketcher::<I,T,H>{b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
-                    k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(m),
+                    k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(m), nb_overflow : 0,
                     b_hasher: BuildHasherDefault::<H>::default(), t_marker : PhantomData};
     }
 }
@@ -157,7 +207,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         let k_vec : Vec<I> = (0..params.get_m()).into_iter().map(|_| I::zero()).collect();
         //
         return SetSketcher::<I,T,H>{b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
-            k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(params.get_m() as usize),
+            k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(params.get_m() as usize), nb_overflow : 0,
             b_hasher, t_marker : PhantomData};
     }
 
@@ -192,7 +242,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
             assert!((1. - lb_xj).floor() >= 0.);
             //
             let z : u64 = (self.q+1).min((1. - lb_xj).floor() as u64);
-            log::debug!("j : {}, x_j : {:.5e} , lb_xj : {:.5e}, z : {:.5e}", j, x_j, lb_xj , z);
+            log::trace!("j : {}, x_j : {:.5e} , lb_xj : {:.5e}, z : {:.5e}", j, x_j, lb_xj , z);
             let k= 0.max(z);
             // 
             if k as f64 <= self.lower_k {
@@ -205,6 +255,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
                 log::debug!("setting slot i: {}, f_k : {:.3e}", i, k);
                 // we must enforce that f_k fits into I
                 if k > imax {
+                    self.nb_overflow += 1;
                     log::info!("got a k value over I range : {:.3e}, I::max : {:#}", k, imax);
                 }
 
@@ -213,7 +264,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
                 if self.nbmin % self.m == 0 {
                     log::debug!("nbmin = {}", self.nbmin);
                     let low = self.k_vec.iter().fold(self.k_vec[0], |min : I, x| if x < &min { *x} else {min});
-                    log::debug!("setting low to : {:?}", low);
+                    log::trace!("setting low to : {:?}", low);
                     self.lower_k = NumCast::from::<I>(low).unwrap();
                 }
             }
@@ -225,7 +276,13 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     /// return an estimate of the lowest value of sketch
     /// a null value is a diagnostic of bad skecthing
     pub fn get_low_sketch(&self) -> i64 {
-        return self.lower_k.floor() as i64
+        return self.lower_k.floor() as i64;
+    }
+
+    // return the number of time value sketcher overflowed the number of bits allocated
+    // should be less than number of values sketched / 100_000 if parameters are well chosen. 
+    pub fn get_nb_overlow(&self) -> u64 {
+        return self.nb_overflow;
     }
 
     /// Arg to_sketch is an array ( a slice) of values to hash.
@@ -254,6 +311,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         self.k_vec = (0..self.m).into_iter().map(|_| I::zero()).collect();
         self.lower_k = 0.;
         self.nbmin = 0;
+        self.nb_overflow = 0;
     }  // end of reinit
 
 

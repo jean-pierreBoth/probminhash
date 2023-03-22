@@ -16,14 +16,13 @@
 
 use log::trace;
 
-// use std::{cmp};
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
 use rand::distributions::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use num::{Integer, ToPrimitive, NumCast, Unsigned};
+use num::{Integer, ToPrimitive, FromPrimitive, Unsigned};
 
 use crate::fyshuffle::*;
 
@@ -93,7 +92,7 @@ impl Hasher for NoHashHasher {
 /// 
 /// It runs in one pass on data so it can be used in streaming
 
-pub struct SuperMinHash2<'a, I: Integer, T: Hash, H: 'a + Hasher+Default> {
+pub struct SuperMinHash2<I: Integer, T: Hash, H: Hasher+Default> {
     /// 
     hsketch:Vec<I>,
     /// initialization marker
@@ -109,7 +108,7 @@ pub struct SuperMinHash2<'a, I: Integer, T: Hash, H: 'a + Hasher+Default> {
     /// random permutation generator
     permut_generator : FYshuffle,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
-    b_hasher: &'a BuildHasherDefault<H>,
+    b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
     t_marker: PhantomData<T>,
     //
@@ -118,12 +117,12 @@ pub struct SuperMinHash2<'a, I: Integer, T: Hash, H: 'a + Hasher+Default> {
 
 
 
-impl <'a, I, T, H : 'a + Hasher+Default> SuperMinHash2<'a,I, T, H> 
-    where   I: Integer + Unsigned + ToPrimitive + NumCast  + Copy + Clone + Send + Sync + std::fmt::Debug, 
+impl <I, T, H : Hasher+Default> SuperMinHash2<I, T, H> 
+    where   I: Integer + Unsigned + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + std::fmt::Debug, 
             T:Hash {
     /// allocate a struct to do SuperMinHash2.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
-    pub fn new(size:usize, build_hasher: &'a BuildHasherDefault<H>) -> SuperMinHash2<'a, I, T, H> {
+    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> SuperMinHash2<I, T, H> {
         //
         log::info!("\n allocating-sketcher \n");
         //
@@ -193,7 +192,7 @@ impl <'a, I, T, H : 'a + Hasher+Default> SuperMinHash2<'a,I, T, H>
         let mut hasher = self.b_hasher.build_hasher();
         to_sketch.hash(&mut hasher);
         let hval_64 : u64 = hasher.finish();
-        let hval_i =  num::NumCast::from::<u64>(hval_64).unwrap();
+        let hval_i =  I::from_u64(hval_64).unwrap();
     //    let hval_i = I::from_u64(hval_64 & I::max_value()).unwrap() as u64;
         // Then initialize random numbers generators with seedxor,
         // we have one random generator for each element to sketch
@@ -311,7 +310,7 @@ mod tests {
     fn test_build_hasher() {
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let _new_hasher = bh.build_hasher();
-        let _sminhash : SuperMinHash2<u64, u64, FnvHasher>= SuperMinHash2::new(10, &bh);
+        let _sminhash : SuperMinHash2<u64, u64, FnvHasher>= SuperMinHash2::new(10, bh);
     }  // end of test_build_hasher
 
 
@@ -328,7 +327,7 @@ mod tests {
         let size = 100;
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : SuperMinHash2<u64, usize, FnvHasher>= SuperMinHash2::new(size, &bh);
+        let mut sminhash : SuperMinHash2<u64, usize, FnvHasher>= SuperMinHash2::new(size, bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -367,7 +366,7 @@ mod tests {
         let size = 70000;
         //
         let bh = BuildHasherDefault::<XxHash32>::default();
-        let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(size, &bh);
+        let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(size, bh);
         // now compute sketches
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
@@ -410,7 +409,7 @@ mod tests {
         let jexact = inter as f32 / 2000.;
         let size = 500;
         let bh = BuildHasherDefault::<NoHashHasher>::default();
-        let mut sminhash : SuperMinHash2<u64, u64, NoHashHasher>= SuperMinHash2::new(size, &bh);
+        let mut sminhash : SuperMinHash2<u64, u64, NoHashHasher>= SuperMinHash2::new(size, bh);
         // now compute sketches
         trace!("sketching a ");
         let resa = sminhash.sketch_slice(&va);
