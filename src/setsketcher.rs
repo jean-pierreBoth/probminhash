@@ -18,7 +18,7 @@ use rand::prelude::*;
 use rand_distr::{Exp1};
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use num::{Integer, ToPrimitive, FromPrimitive, Bounded, NumCast};
+use num::{Integer, ToPrimitive, FromPrimitive, Bounded};
 
 use crate::fyshuffle::*;
 
@@ -155,8 +155,8 @@ impl SetSketchParams {
 // default parameters ensure capacity to represented a set up to 10^28 elements.
 // F is f32 or f64. To spare memory in Hnsw f32 is better.
 pub struct SetSketcher<I : Integer, T, H:Hasher+Default> {
-    // b must be <= 2
-    b : f64,
+    // b must be <= 2. In fact we use lnb (precomputed log of b)
+    _b : f64,
     // size of sketch
     m : u64, 
     // default is 20
@@ -173,6 +173,8 @@ pub struct SetSketcher<I : Integer, T, H:Hasher+Default> {
     permut_generator : FYshuffle,
     //
     nb_overflow : u64,
+    // we store ln(b)
+    lnb : f64,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -188,8 +190,9 @@ impl <I, T, H> Default for SetSketcher<I, T, H >
         let params = SetSketchParams::default();
         let m : usize = 4096;
         let k_vec : Vec<I> = (0..m).into_iter().map(|_| I::zero()).collect();
-        return SetSketcher::<I,T,H>{b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
-                    k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(m), nb_overflow : 0,
+        let lnb = (params.get_b() - 1.).ln_1p();  // this is ln(b) for b near 1.
+        return SetSketcher::<I,T,H>{_b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
+                    k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(m), nb_overflow : 0, lnb,
                     b_hasher: BuildHasherDefault::<H>::default(), t_marker : PhantomData};
     }
 }
@@ -205,9 +208,10 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     pub fn new(params : SetSketchParams, b_hasher: BuildHasherDefault::<H>) -> Self {
         //
         let k_vec : Vec<I> = (0..params.get_m()).into_iter().map(|_| I::zero()).collect();
+        let lnb = (params.get_b() - 1.).ln_1p();  // this is ln(b) for b near 1.
         //
-        return SetSketcher::<I,T,H>{b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
-            k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(params.get_m() as usize), nb_overflow : 0,
+        return SetSketcher::<I,T,H>{_b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
+            k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(params.get_m() as usize), nb_overflow : 0, lnb,
             b_hasher, t_marker : PhantomData};
     }
 
@@ -225,25 +229,24 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(hval1);
         self.permut_generator.reset();
         //
-        let lb = (self.b - 1.).ln_1p();  // this is ln(b) for b near 1.
+        let iq1 : i64 = self.q as i64 + 1;
+        let inva : f64 = 1. / self.a;
         //
         let mut x_pred : f64 = 0.;
         for j in 0..self.m {
             //
-            let x_j = x_pred + (1. / (self.a * (self.m - j) as f64)) * rng.sample::<f64, Exp1>(Exp1);  // use Ziggurat
+            let x_j = x_pred + (inva / (self.m - j) as f64) * rng.sample::<f64, Exp1>(Exp1);  // use Ziggurat
             x_pred = x_j;
             //
-            let lb_xj =  x_j.ln()/lb;   // log base b of x_j
+            let lb_xj =  x_j.ln()/self.lnb;   // log base b of x_j
             //
             if lb_xj > - self.lower_k  {
                 break;
             } 
             //
-            assert!((1. - lb_xj).floor() >= 0.);
-            //
-            let z : u64 = (self.q+1).min((1. - lb_xj).floor() as u64);
+            let z : i64 = iq1.min((1. - lb_xj).floor() as i64);
             log::trace!("j : {}, x_j : {:.5e} , lb_xj : {:.5e}, z : {:.5e}", j, x_j, lb_xj , z);
-            let k= 0.max(z);
+            let k= 0.max(z) as u64;
             // 
             if k as f64 <= self.lower_k {
                 break;
@@ -252,20 +255,24 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
             let i = self.permut_generator.next(&mut rng);
             //
             if k > self.k_vec[i].to_u64().unwrap() {
-                log::debug!("setting slot i: {}, f_k : {:.3e}", i, k);
+                log::trace!("setting slot i: {}, f_k : {:.3e}", i, k);
                 // we must enforce that f_k fits into I
                 if k > imax {
                     self.nb_overflow += 1;
-                    log::info!("got a k value over I range : {:.3e}, I::max : {:#}", k, imax);
+                    self.k_vec[i] = I::from_u64(imax).unwrap();
+                    log::warn!("I overflow , got a k value {:.3e} over I::max : {:#}", k, imax);
                 }
-
-                self.k_vec[i] = I::from_u64(k).unwrap();
+                else {
+                    self.k_vec[i] = I::from_u64(k).unwrap();
+                }
                 self.nbmin = self.nbmin + 1;
                 if self.nbmin % self.m == 0 {
-                    log::debug!("nbmin = {}", self.nbmin);
-                    let low = self.k_vec.iter().fold(self.k_vec[0], |min : I, x| if x < &min { *x} else {min});
-                    log::trace!("setting low to : {:?}", low);
-                    self.lower_k = NumCast::from::<I>(low).unwrap();
+                    let flow = self.k_vec.iter().fold(self.k_vec[0], |min : I, x| if x < &min { *x} else {min}).to_f64().unwrap();
+                    if flow > self.lower_k {
+                        // no register can decrease so self.lower_k must not decrease
+                        log::debug!("j : {}, nbmin = {} , setting low to : {:?}", j, self.nbmin, flow);
+                        self.lower_k = flow;
+                    }
                 }
             }
         }
