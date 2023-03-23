@@ -22,7 +22,7 @@ use rand::prelude::*;
 use rand::distributions::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use num::{Integer, ToPrimitive, FromPrimitive, Unsigned};
+use num::{Integer, ToPrimitive, FromPrimitive, Bounded, Unsigned};
 
 use crate::fyshuffle::*;
 
@@ -118,7 +118,7 @@ pub struct SuperMinHash2<I: Integer, T: Hash, H: Hasher+Default> {
 
 
 impl <I, T, H : Hasher+Default> SuperMinHash2<I, T, H> 
-    where   I: Integer + Unsigned + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + std::fmt::Debug, 
+    where   I: Integer + Unsigned + ToPrimitive + FromPrimitive + Bounded + Copy + Clone + Send + Sync + std::fmt::Debug, 
             T:Hash {
     /// allocate a struct to do SuperMinHash2.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
@@ -192,13 +192,12 @@ impl <I, T, H : Hasher+Default> SuperMinHash2<I, T, H>
         let mut hasher = self.b_hasher.build_hasher();
         to_sketch.hash(&mut hasher);
         let hval_64 : u64 = hasher.finish();
+        // this cause panic if I not adapted to hasher!  We do not use it...
         let hval_i =  I::from_u64(hval_64).unwrap();
-    //    let hval_i = I::from_u64(hval_64 & I::max_value()).unwrap() as u64;
         // Then initialize random numbers generators with seedxor,
         // we have one random generator for each element to sketch
         // In probminhash we imposed T to verifiy Into<usize>. We have to be coherent..
         let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval_64);
- //       let mut rand_generator = wyhash::WyRng::seed_from_u64(hval_64);
         self.permut_generator.reset();
         //
         log::trace!("item-rank : {}", self.item_rank);
