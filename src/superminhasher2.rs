@@ -226,9 +226,9 @@ impl <I, T, H : Hasher+Default> SuperMinHash2<I, T, H>
                     self.l[k] = j;
                     self.values[k] = r;
                     self.hsketch[k] = hval_i;
+                    log::debug!("after : j {} k {} l[k] {}, upper : {}", j , k , self.l[k], self.a_upper);
                 }
             }
-            log::trace!("after : j {} k {} l[k] {}, upper : {}", j , k , self.l[k], self.a_upper);
             j+=1;
         } // end of while on j <= upper
         self.item_rank +=1;            

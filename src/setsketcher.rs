@@ -1,7 +1,9 @@
-//! setsketcher implementation
+
 //! implementation of SetSkectch : filling the gap between MinHash and and HyperLogLog <https://arxiv.org/abs/2101.00314>
-//! or <https://vldb.org/pvldb/vol14/p2244-ertl.pdf>
+//! or <https://vldb.org/pvldb/vol14/p2244-ertl.pdf>.
 //! 
+//! We implement Setsketch1 algorithm where we suppose that the size of
+//! on which the algorithm runs is large compared to the size of sketch.
 
 
 use serde::{Deserialize, Serialize};
@@ -83,7 +85,8 @@ impl SetSketchParams {
         self.m = nb_sketch as u64;
     }
 
-    /// get bounds for J given parameters and first estimate for jaccard. Returns a 2-uple (lower, upper)
+    /// get bounds for J given parameters and first estimate for jaccard.    
+    /// Returns a 2-uple (lower, upper).    
     /// For the parameters choice the difference between lower and upper bound should be smaller than accepted error over the range of jaccard
     /// needed by problem treated.  
     /// For the default parameters the difference between lower and upper is less 0.5% of jaccard value.
@@ -151,9 +154,11 @@ impl SetSketchParams {
 
 
 
-
-// default parameters ensure capacity to represented a set up to 10^28 elements.
-// F is f32 or f64. To spare memory in Hnsw f32 is better.
+/// This structure implements Setsketch1 algorithm which suppose that the size of
+/// on which the algorithm runs is large compared to the size of sketch.
+///   
+/// The default parameters ensure capacity to represent a set up to 10^28 elements.
+/// I is an integer u16, u32. u16 should be sufficient for most cases (see [SetSketchParams])
 pub struct SetSketcher<I : Integer, T, H:Hasher+Default> {
     // b must be <= 2. In fact we use lnb (precomputed log of b)
     _b : f64,
@@ -280,14 +285,16 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         return Ok(());
     }  // end of sketch
 
-    /// return an estimate of the lowest value of sketch
-    /// a null value is a diagnostic of bad skecthing
+    /// returns the lowest value of sketch
+    /// a null value is a diagnostic of bad skecthing. As the algorithm suppose
+    /// that the size of the set sketched is large compared to the num ber of sketch this
+    /// has a very low probability.
     pub fn get_low_sketch(&self) -> i64 {
         return self.lower_k.floor() as i64;
     }
 
-    // return the number of time value sketcher overflowed the number of bits allocated
-    // should be less than number of values sketched / 100_000 if parameters are well chosen. 
+    /// returns the number of time value sketcher overflowed the number of bits allocated
+    /// should be less than number of values sketched / 100_000 if parameters are well chosen. 
     pub fn get_nb_overlow(&self) -> u64 {
         return self.nb_overflow;
     }
@@ -322,7 +329,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     }  // end of reinit
 
 
-    /// get sketch
+    /// get signature sketch. Same as get_hsketch
     pub fn get_signature(&self) -> &Vec<I> {
         return &self.k_vec;
     }
