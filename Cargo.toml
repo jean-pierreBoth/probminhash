@@ -60,4 +60,5 @@ env_logger = { version = "0.9"}
 
 default = []
 
+# to enable the interger version of superminhash
 sminhash2 = []
