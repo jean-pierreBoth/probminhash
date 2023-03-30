@@ -155,7 +155,7 @@ impl SetSketchParams {
 
 
 /// This structure implements Setsketch1 algorithm which suppose that the size of
-/// on which the algorithm runs is large compared to the size of sketch.
+/// on which the algorithm runs is large compared to the size of sketch, see function [SetSketcher::get_nb_overflow].
 ///   
 /// The default parameters ensure capacity to represent a set up to 10^28 elements.
 /// I is an integer u16, u32. u16 should be sufficient for most cases (see [SetSketchParams])
@@ -295,7 +295,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
 
     /// returns the number of time value sketcher overflowed the number of bits allocated
     /// should be less than number of values sketched / 100_000 if parameters are well chosen. 
-    pub fn get_nb_overlow(&self) -> u64 {
+    pub fn get_nb_overflow(&self) -> u64 {
         return self.nb_overflow;
     }
 
@@ -317,6 +317,17 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     } // end of sketch_slice
 
 
+    /// The function returns a 2-uple with first field cardinal estimator and second field the **relative standard deviation**.  
+    /// 
+    /// It is a relatively cpu costly function (the computed logs are not cached in the SetSketcher structure) that involves log and exp calls on the whole sketch vector.
+    pub fn get_cardinal_stats(&self) -> (f64, f64) {
+        let sumbk = self.k_vec.iter().fold(0.0f64, | acc : f64, c| acc + (- c.to_f64().unwrap() * (self._b -1.).ln_1p()).exp());
+        let cardinality : f64 = self.m as f64 * (1. - 1./ self._b) / ( self.a as f64 * self.lnb * sumbk);
+        //
+        let rel_std_dev = ((self._b + 1.) / (self._b - 1.) * self.lnb - 1.) / self.m as f64;
+        let rel_std_dev = rel_std_dev.sqrt();
+        return (cardinality, rel_std_dev);
+    }
 
     // reset state
     pub fn reinit(&mut self) {
@@ -352,6 +363,7 @@ mod tests {
     use super::*;
     use fnv::FnvHasher;
     use crate::jaccard::*;
+    use rand::distributions::{Uniform};
 
     #[allow(dead_code)]
     fn log_init_test() {
@@ -446,6 +458,12 @@ mod tests {
             println!("error in sketcing va");
             return;
         }
+        let low_sketch = sethasher.get_low_sketch();
+        log::info!("lowest sketch : {}", low_sketch);
+        assert!(low_sketch > 0);
+        let cardinal = sethasher.get_cardinal_stats();
+        log::info!("cardinal of set a : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
+
         let ska = sethasher.get_signature().clone();
         //
         sethasher.reinit();
@@ -456,6 +474,8 @@ mod tests {
             return;
         }
         let skb = sethasher.get_signature();
+        let cardinal = sethasher.get_cardinal_stats();
+        log::info!("cardinal of set b : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
         //
         log::debug!("ska = {:?}",ska);
         log::debug!("skb = {:?}",skb);
@@ -466,4 +486,27 @@ mod tests {
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
     }  // end of test_range_intersection_fnv_f32
+
+
+    #[test]
+    fn test_hll_card_with_repetition() {
+        //
+        log_init_test();
+        //
+        let vamax = 200;
+        let nb_sketch = 5000;
+        //
+        let mut params = SetSketchParams::default();
+        params.set_m(nb_sketch);
+        let mut sethasher : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default());
+        let unif = Uniform::<usize>::new(0, vamax);
+        let mut rng = Xoshiro256PlusPlus::seed_from_u64(45679 as u64);
+
+        for _ in 0..nb_sketch {
+            sethasher.sketch(&unif.sample(&mut rng)).unwrap();
+        }
+        let cardinal = sethasher.get_cardinal_stats();
+        log::info!("cardinal of set b : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
+    } // end of test_hll_card_with_repetition
+
 }  // end of mod tests
