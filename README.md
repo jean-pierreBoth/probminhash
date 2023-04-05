@@ -23,11 +23,12 @@ An implementation of Superminhash :
 **A new minwise Hashing Algorithm for Jaccard Similarity Estimation**
 Otmar Ertl 2017-2018 Cf [superminhash Ertl](https://arxiv.org/abs/1706.05698)
 
-This algorithm runs on unweighted objects and can sketch billions of objects on a laptop.
+This algorithm runs on unweighted objects and can sketch on a laptop billions of objects into f32/f64 vectors.
 The hash values are computed by the *sketch* method or can be computed before entering SuperMinHash methods.
-In this case (pre-hashed values) the structure just computes permutation according to the paper.
+  
+It runs in one pass on data so it can be used in streaming.  
 
-It runs in one pass on data so it can be used in streaming.
+A variant of this algorithm, **Superminhash2**, sketch data into u32/u64 vectors but is slower. It is accessed with the **sminhash2** feature.
 
 * SetSketch  
   

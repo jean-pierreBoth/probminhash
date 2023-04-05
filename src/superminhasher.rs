@@ -221,7 +221,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : Hasher+Default> 
                     while self.b[self.a_upper] == 0 {
                         self.a_upper = self.a_upper - 1;
                     } // end if j < j_2
-                    log::debug!("after : j {} k {} self.b[j] {}, upper : {}", j , k , self.b[j], self.a_upper);
+                    log::trace!("after : j {} k {} self.b[j] {}, upper : {}", j , k , self.b[j], self.a_upper);
                 } // end update a_upper
             } // end if r+j < ...
             j+=1;
