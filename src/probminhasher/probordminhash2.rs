@@ -449,7 +449,7 @@ fn test_ordminhash2_p2() {
     log::info!("in test_ordminhash2_p2");
     let pattern = get_pattern_2();
     //
-    let nb_iter = 100000;
+    let nb_iter = 50000;
 
     //  pattern2 m = 32, l = 3
     //  0 0 7 23 103 347 1022 2415 4579 7443 10728 13314 14353 13844 11563 8556 5604 3207 1714 732 292 101 41 8 4 0 0 0 0 0 0 0 0

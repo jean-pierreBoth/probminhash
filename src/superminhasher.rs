@@ -1,5 +1,5 @@
 //! An implementation of Superminhash from:    
-//! A new minwise Hashing Algorithm for Jaccard Similarity Estimation.  
+//! *A new minwise Hashing Algorithm for Jaccard Similarity Estimation.*  
 //!  Otmar Ertl (2017-2018) <https://arxiv.org/abs/1706.05698>
 //!
 //! The hash values can be computed before entering SuperMinHash methods

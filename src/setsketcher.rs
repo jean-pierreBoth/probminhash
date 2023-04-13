@@ -1,9 +1,14 @@
 
-//! implementation of SetSkectch : filling the gap between MinHash and and HyperLogLog <https://arxiv.org/abs/2101.00314>
-//! or <https://vldb.org/pvldb/vol14/p2244-ertl.pdf>.
+//! implementation of the paper :
+//! *SetSkectch : filling the gap between MinHash and HyperLogLog*  
+//! See  <https://arxiv.org/abs/2101.00314> or <https://vldb.org/pvldb/vol14/p2244-ertl.pdf>.
 //! 
-//! We implement Setsketch1 algorithm where we suppose that the size of
-//! on which the algorithm runs is large compared to the size of sketch.
+//! We implement Setsketch1 algorithm which supposes that the size of the data set
+//! to sketch is large compared to the size of sketch.
+//! The purpose of this implementation is to provide Local Sensitive sketching of a set
+//! adapted to the Jaccard distance with some precaution, see function [get_jaccard_bounds](SetSketchParams::get_jaccard_bounds).  
+//! 
+//! The cardinal of the set can be estimated with the basic (unoptimized) function [get_cardinal_stats](SetSketcher::get_cardinal_stats)
 
 
 use serde::{Deserialize, Serialize};
@@ -34,8 +39,9 @@ use crate::fyshuffle::*;
 /// - choice of q:  if $$ q >=  log_{b} (\frac{m  n  a}{\epsilon})$$ then a sketch value is less than q+1 with proba less than $\epsilon$ up to n data to sketch.
 ///  *(see lemma 5 of paper)*.  
 /// 
-/// m = 4096, b = 1.001,  a = 20 , q = $2^{16} -2 = 65534 $ guarantee the absence of negative value in sketch with proba $8.28 \space 10^{-6}$ and probability of
-/// sketch value greater than q+1 with probability less than $2.93 \space 10^{-6}$, and so the sketches can be represented by a u16!
+/// The default initialization corresponds to $m = 4096, b = 1.001,  a = 20 , q = 2^{16} -2 = 65534$ and guarantees the absence of negative value in sketch with proba $8.28 \space 10^{-6}$ and probability of
+/// sketch value greater than q+1 with probability less than $2.93 \space 10^{-6}$.  
+/// With low probability truncature the sketches can thus be represented by a u16 vector.
 /// 
 ///    
 /// 
