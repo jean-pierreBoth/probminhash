@@ -36,7 +36,7 @@ An implementation of the SetSketch :
 **SetSketch: Filling the gap between MinHash and HyperLogLog**
 Otmar Ertl 2021 [arxiv](https://arxiv.org/abs/2101.00314) or [vldb](https://vldb.org/pvldb/vol14/p2244-ertl.pdf)
 
-This algorithm runs on unweighted objects. It is slower than SuperMinHash but can sketch billions of objects into vectors of 16 bytes integers.
+This algorithm runs on unweighted objects. It is slower than SuperMinHash but can sketch billions of objects into vectors of 16 bytes integers. Morever sketches are mergeable.  
 We provide sketching (adapted to LSH with Jaccard distance) and a cardinality estimator of the sketched set.
 
 * ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  

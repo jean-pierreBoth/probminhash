@@ -204,7 +204,7 @@ impl <I, T, H> Default for SetSketcher<I, T, H >
         let lnb = (params.get_b() - 1.).ln_1p();  // this is ln(b) for b near 1.
         return SetSketcher::<I,T,H>{_b : params.get_b(), m : params.get_m(), a: params.get_a(), q: params.get_q(), 
                     k_vec, lower_k : 0., nbmin : 0, permut_generator :  FYshuffle::new(m), nb_overflow : 0, lnb,
-                    b_hasher: BuildHasherDefault::<H>::default(), t_marker : PhantomData};
+                    b_hasher: BuildHasherDefault::<H>::default(),t_marker : PhantomData};
     }
 }
 
@@ -344,6 +344,30 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
         self.nbmin = 0;
         self.nb_overflow = 0;
     }  // end of reinit
+
+
+    /// setsketch is mergeable with another sketch if parameters are the same. We can thus get a sketch for a union.
+    /// This methods merge with another sketch. 
+    /// Self replaces its sketch by the union of itself and the other if the result is OK
+    /// otherwise it return Err and is left unchanged
+    pub fn merge(&mut self, other : &SetSketcher<I, T, H>) -> Result<(),()> {
+        // check parameters equality
+        if self.m != other.m || self.q != other.q {
+            return Err(());
+        }
+        if (self._b - other._b).abs() / self._b >= f64::EPSILON || (self.a - other.a).abs() / self.a >=  f64::EPSILON {
+            return Err(());
+        }
+        // takes max
+        for i in 0..self.k_vec.len() {
+            self.k_vec[i] = self.k_vec[i].max(other.k_vec[i]);
+        }
+        //
+        self.nb_overflow += other.nb_overflow;
+        //
+        Ok(())
+    } // end of merge
+
 
 
     /// get signature sketch. Same as get_hsketch
@@ -514,5 +538,59 @@ mod tests {
         let cardinal = sethasher.get_cardinal_stats();
         log::info!("cardinal of set b : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
     } // end of test_hll_card_with_repetition
+
+
+    // test merge 
+    #[test]
+    fn test_merge_1() {
+       //
+       log_init_test();
+       // 
+       let vbmax = 2000;
+       let va : Vec<usize> = (0..1000).collect();
+       let vb : Vec<usize> = (900..vbmax).collect();
+       let union = 2000.;
+       let nb_sketch = 4000;
+       //
+       let mut params = SetSketchParams::default();
+       params.set_m(nb_sketch);
+       //
+       let mut sethasher_a : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+        // now compute sketches
+        let resa = sethasher_a.sketch_slice(&va);
+        if !resa.is_ok() {
+            println!("error in sketcing va");
+            return;
+        }  
+        let mut sethasher_b : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+        // now compute sketches
+        let resb = sethasher_b.sketch_slice(&vb);
+        if !resb.is_ok() {
+            println!("error in sketcing vb");
+            return;
+        }
+        // merging vb into va
+        let res = sethasher_a.merge(&sethasher_b);
+        assert!(res.is_ok());
+        let (mean, std) = sethasher_a.get_cardinal_stats();
+        log::info!("mean , std : {:.3e}, {:.3e}", mean , std );
+        //
+        assert!((mean-union).abs() / union <= 2.0 * std);
+        // now we compute intersection between sethasher_a which represent union and b
+        let jac = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
+        let jexact = vb.len() as f32 / vbmax as f32;
+        let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
+        // try to add more things in sketcha
+        for i in 500..2500 {
+            sethasher_a.sketch(&i).unwrap();
+        }
+        log::info!("after adding in merged sethasher_a");
+        let (mean, std) = sethasher_a.get_cardinal_stats();
+        log::info!("mean , relative std : {:.3e}, {:.3e}", mean , std );
+    } // end test_merge_1
+
+
 
 }  // end of mod tests
