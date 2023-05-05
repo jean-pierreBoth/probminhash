@@ -6,7 +6,8 @@
 //! We implement Setsketch1 algorithm which supposes that the size of the data set
 //! to sketch is large compared to the size of sketch.
 //! The purpose of this implementation is to provide Local Sensitive sketching of a set
-//! adapted to the Jaccard distance with some precaution, see function [get_jaccard_bounds](SetSketchParams::get_jaccard_bounds).  
+//! adapted to the Jaccard distance with some precaution, see function [get_jaccard_bounds](SetSketchParams::get_jaccard_bounds).   
+//! Moreover the sketches produced are mergeable see function [merge](SetSketcher::merge). 
 //! 
 //! The cardinal of the set can be estimated with the basic (unoptimized) function [get_cardinal_stats](SetSketcher::get_cardinal_stats)
 
@@ -346,8 +347,8 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     }  // end of reinit
 
 
-    /// setsketch is mergeable with another sketch if parameters are the same. We can thus get a sketch for a union.
-    /// This methods merge with another sketch. 
+    /// Setsketch is mergeable with another sketch if parameters are the same.  
+    /// We can thus get a sketch for a union and so estimate the cardinal of the union of 2 sets.  
     /// Self replaces its sketch by the union of itself and the other if the result is OK
     /// otherwise it return Err and is left unchanged
     pub fn merge(&mut self, other : &SetSketcher<I, T, H>) -> Result<(),()> {
