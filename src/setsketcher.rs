@@ -110,7 +110,7 @@ impl SetSketchParams {
         //
         log::debug!("b_inf : {:.5e}, b_aux : {:.3e}", b_inf, b_aux);
         //
-        assert!(jinf <= jsup);
+        assert!( jac >= 1.  || jinf <= jsup);
         //
         return (jinf, jsup);
     }
@@ -406,8 +406,10 @@ mod tests {
         //
         log_init_test();
         //
-        let params = SetSketchParams::default();
-        log::info!("params default : {:?}", params);
+        #[allow(unused_mut)]
+        let mut params = SetSketchParams::default();
+        // we can possibly change params.b to check effect
+        log::info!("params : {:?}", params);
         //
         let nb_frac = 20;
 
