@@ -28,6 +28,10 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 
 use num::{Integer, ToPrimitive, FromPrimitive, Bounded};
 
+use rayon::prelude::*;
+use argmin::solver::goldensectionsearch::GoldenSectionSearch;
+
+
 use crate::fyshuffle::*;
 
 #[cfg_attr(doc, katexit::katexit)]
@@ -381,9 +385,69 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
     pub fn get_hsketch(&self) -> &Vec<I> {
         self.get_signature()
     }
+
 } // end of impl SetSketch<F:
 
 
+/// This function implements Jaccard joint estimation based on likelyhood estimator
+/// as described in Ertl paper paragraph 3.2.
+/// The stucture needs the parameters used during sketching.  
+/// **It is the user responsability to use it with skecthes from the same parameters**
+pub struct MleJaccard {
+    // b must be <= 2. In fact we use lnb (precomputed log of b)
+    b : f64,
+    // size of sketch
+    m : u64, 
+    // default is 20
+    a : f64,
+        // we store ln(b)
+    lnb : f64,
+} // end of MleJaccard
+
+
+impl MleJaccard {
+
+    pub fn new(b : f64, m : u64, a : f64) -> Self {
+        let lnb = (b - 1.).ln_1p();  // this is ln(b) for b near 1.
+        MleJaccard{b,m,a, lnb}
+    }
+
+
+    pub fn get_cardinal_estimate<I>(&self, sketch : &[I]) -> f64  
+        where I :Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + ParallelSlice<I> {
+            //
+        assert_eq!(self.m, sketch.len() as u64);
+        // we know we use large value sof m
+        let sumbk : f64 = sketch.into_par_iter().map(|c| (- (*c).to_f64().unwrap() * (self.b -1.).ln_1p()).exp()).sum();
+        let cardinality : f64 = self.m as f64 * (1. - 1./ self.b) / ( self.a as f64 * self.lnb * sumbk);
+        //
+        cardinality
+    } // end of get_cardinal_estimate
+
+
+    /// This function implements Jaccard joint estimation based on likelyhood estimator
+    /// as described in Ertl paper paragraph 3.2
+    pub fn mle_jaccard<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> f64 
+        where I :Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + ParallelSlice<I> {
+            //
+        assert_eq!(self.m, sketch1.len() as u64);
+        assert_eq!(self.m, sketch2.len() as u64);
+        // we know we use large value sof m
+        let card1 = self.get_cardinal_estimate(sketch1);
+        let card2 = self.get_cardinal_estimate(sketch2);
+        log::debug!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
+        //
+        let b_inf = 0.;
+        let aux= card1/card2;
+        log::debug!("get_cardinal_estimate : {}", aux);
+        let b_sup = aux.min(1./aux);
+        log::debug!("mle_jaccard interval {} ,  {}", b_inf, b_sup);  
+        //
+        let _goldensearch = GoldenSectionSearch::new(b_inf, b_sup);
+        panic!("not yet implemented");
+    } // end of mle_jaccard
+
+} // end of impl MleJaccard
 
 //======================================================================================================
 
