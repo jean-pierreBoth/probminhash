@@ -772,7 +772,7 @@ mod tests {
     // test to check maximum likelyhood joint estimator at low J
     #[test]
     fn test_merge_2() {
-       //
+        //
         log_init_test();
         // 
         let vbmax = 50000;
