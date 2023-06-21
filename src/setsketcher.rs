@@ -441,9 +441,9 @@ impl CostFunction for  MleCost {
     //
     fn cost(&self, j: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
         //
-        let pbplus = self.pb(self.u - self.v * j).ln();
-        let pbless = self.pb(self.v - self.u * j).ln();
-        let log_likelyhood = self.dplus * pbplus + self.dless * pbless + self.dequal * (1.- pbplus - pbless );
+        let pbplus = self.pb(self.u - self.v * j);
+        let pbless = self.pb(self.v - self.u * j);
+        let log_likelyhood = self.dplus * pbplus.ln() + self.dless * pbless.ln() + self.dequal * (1.- pbplus - pbless).ln();
         // return - likelyhood as we want to maximize
         return Ok(-log_likelyhood);
     } // end of cost
@@ -498,7 +498,7 @@ impl MleJaccard {
 
     /// This function implements Jaccard joint estimation based on likelyhood estimator
     /// as described in Ertl paper paragraph 3.2
-    pub fn get_mle<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> f64 
+    pub fn get_mle<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> Option<f64>
         where I  : Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync ,
              [I] : ParallelSlice<I> {
             //
@@ -551,9 +551,9 @@ impl MleJaccard {
 
         let state = res.state();
         log::info!("state : {:#?}", state);
-        log::info!("best solution : {:#?}, cost : {:#?}", state.best_param, state.best_cost);
+        log::info!("best solution (J): {:#?}, cost : {:#?}", state.best_param, state.best_cost);
 
-        panic!("not yet implemented");
+        return state.best_param;
     } // end of mle_jaccard
 
 } // end of impl MleJaccard
