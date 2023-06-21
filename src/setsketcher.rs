@@ -29,8 +29,11 @@ use rand_xoshiro::Xoshiro256PlusPlus;
 use num::{Integer, ToPrimitive, FromPrimitive, Bounded};
 
 use rayon::prelude::*;
-use argmin::solver::goldensectionsearch::GoldenSectionSearch;
 
+
+use argmin::solver::brent::BrentOpt;
+use argmin::core::observers::{ObserverMode, SlogLogger};
+use argmin::core::{CostFunction, Error, Executor};
 
 use crate::fyshuffle::*;
 
@@ -389,6 +392,65 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
 } // end of impl SetSketch<F:
 
 
+//========================================================================================
+
+/// computes minus likelyhood , to be minimized by Brent method.
+/// We use notations of Ertl paper
+#[derive(Copy,Clone,Debug)]
+pub(in self) struct MleCost {
+    //
+    dplus   : f64,
+    dless   : f64,
+    dequal  : f64,
+    u       : f64,
+    v       : f64,
+    b       : f64,
+}
+
+
+impl MleCost {
+
+    fn new(dplus : f64, dless : f64, dequal : f64, u : f64, v : f64, b : f64) -> Self {
+        MleCost{dplus, dless, dequal, u,v,b}
+    }
+
+    // -ln(1. - x * (b-1)/b) / ln(b) =  -ln(1. - x * (b-1)/b) / (b-1).ln_1p()
+    //  then we can distinguish if x < 0 we can use ln_1p for the numerator too
+    //  We now x is in [-1. , 1.] so x * (b-1)/b) is small
+    fn pb(&self, x : f64) -> f64 {
+        let val = if x <= 0. {
+            let arg = - x * (self.b - 1.)/ self.b;
+            - arg.ln_1p() / (self.b - 1.).ln_1p()
+        }
+        else {
+            let arg = 1. - x * (self.b - 1.)/ self.b;
+            - arg.ln() / (self.b - 1.).ln_1p()
+        };
+        //
+        assert!(!val.is_nan());
+        //
+        return val;
+    } // end of pb
+} // end of MleCost
+
+
+// We need to associate a cost function to MleJaccard to run argmin
+impl CostFunction for  MleCost {
+    type Param = f64;
+    type Output = f64;
+    //
+    fn cost(&self, j: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
+        //
+        let pbplus = self.pb(self.u - self.v * j).ln();
+        let pbless = self.pb(self.v - self.u * j).ln();
+        let log_likelyhood = self.dplus * pbplus + self.dless * pbless + self.dequal * (1.- pbplus - pbless );
+        // return - likelyhood as we want to maximize
+        return Ok(-log_likelyhood);
+    } // end of cost
+} 
+
+
+// 
 /// This function implements Jaccard joint estimation based on likelyhood estimator
 /// as described in Ertl paper paragraph 3.2.
 /// The stucture needs the parameters used during sketching.  
@@ -405,6 +467,15 @@ pub struct MleJaccard {
 } // end of MleJaccard
 
 
+impl From<SetSketchParams> for MleJaccard {
+
+    fn from(params : SetSketchParams) -> Self {
+        MleJaccard::new(params.get_b(), params.get_m(), params.get_a())
+    }
+
+} // end of From<SetSketchParams>
+
+
 impl MleJaccard {
 
     pub fn new(b : f64, m : u64, a : f64) -> Self {
@@ -412,9 +483,9 @@ impl MleJaccard {
         MleJaccard{b,m,a, lnb}
     }
 
-
     pub fn get_cardinal_estimate<I>(&self, sketch : &[I]) -> f64  
-        where I :Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + ParallelSlice<I> {
+        where  I  : Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync,
+              [I] : ParallelSlice<I> {
             //
         assert_eq!(self.m, sketch.len() as u64);
         // we know we use large value sof m
@@ -427,8 +498,9 @@ impl MleJaccard {
 
     /// This function implements Jaccard joint estimation based on likelyhood estimator
     /// as described in Ertl paper paragraph 3.2
-    pub fn mle_jaccard<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> f64 
-        where I :Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync + ParallelSlice<I> {
+    pub fn get_mle<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> f64 
+        where I  : Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync ,
+             [I] : ParallelSlice<I> {
             //
         assert_eq!(self.m, sketch1.len() as u64);
         assert_eq!(self.m, sketch2.len() as u64);
@@ -436,6 +508,25 @@ impl MleJaccard {
         let card1 = self.get_cardinal_estimate(sketch1);
         let card2 = self.get_cardinal_estimate(sketch2);
         log::debug!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
+        let u : f64;
+        let v : f64;
+        u = card1 / (card1 + card2);
+        v = card2 / (card1 + card2);
+        // 
+        let mut dplus: u32 = 0;
+        let mut dless : u32 = 0;
+        let mut dequal : u32 = 0;
+        for i in 0..sketch1.len() {
+            if sketch1[i] > sketch2[i] {
+                dplus += 1;
+            }
+            else if sketch1[i] < sketch2[i] {
+                dless  += 1;
+            }
+            else {
+                dequal += 1; 
+            }
+        }
         //
         let b_inf = 0.;
         let aux= card1/card2;
@@ -443,7 +534,25 @@ impl MleJaccard {
         let b_sup = aux.min(1./aux);
         log::debug!("mle_jaccard interval {} ,  {}", b_inf, b_sup);  
         //
-        let _goldensearch = GoldenSectionSearch::new(b_inf, b_sup);
+        let brentopt = BrentOpt::new(b_inf, b_sup);
+        let brentopt = brentopt.set_tolerance(1.0E-5, 1.0E-5);
+        //
+        let cost = MleCost::new(dplus as f64 , dless as f64, dequal as f64, u,v, self.b);
+
+        let res = Executor::new(cost, brentopt)
+            .configure(|state| state.max_iters(100))
+            .add_observer(SlogLogger::term(), ObserverMode::Always)
+            .run()
+            .unwrap();
+
+        // Wait a second (lets the logger flush everything before printing again)
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        log::info!("res : {:#}", res);
+
+        let state = res.state();
+        log::info!("state : {:#?}", state);
+        log::info!("best solution : {:#?}, cost : {:#?}", state.best_param, state.best_cost);
+
         panic!("not yet implemented");
     } // end of mle_jaccard
 
@@ -658,6 +767,48 @@ mod tests {
         log::info!("mean , relative std : {:.3e}, {:.3e}", mean , std );
     } // end test_merge_1
 
+
+
+    // test to check maximum likelyhood joint estimator at low J
+    #[test]
+    fn test_merge_2() {
+       //
+        log_init_test();
+        // 
+        let vbmax = 50000;
+        let va : Vec<usize> = (0..1000).collect();
+        let vb : Vec<usize> = (900..vbmax).collect();
+        let nb_sketch = 10000;
+        //
+        let mut params = SetSketchParams::default();
+        params.set_m(nb_sketch);
+        //
+        let mut sethasher_a : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+            // now compute sketches
+        let resa = sethasher_a.sketch_slice(&va);
+        if !resa.is_ok() {
+            println!("error in sketcing va");
+            return;
+        }  
+        let mut sethasher_b : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+        // now compute sketches
+        let resb = sethasher_b.sketch_slice(&vb);
+        if !resb.is_ok() {
+            println!("error in sketcing vb");
+            return;
+        }
+        // now we compute intersection between sethasher_a and sethasher_b
+        let jac = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
+        let jexact = 100 as f32 / vbmax as f32;
+        let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
+        //
+        let mle_jaccard = MleJaccard::from(params);
+
+        let j = mle_jaccard.get_mle(&sethasher_a.get_signature(), sethasher_b.get_signature());
+
+    } // end test_merge_2
 
 
 }  // end of mod tests
