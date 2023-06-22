@@ -301,7 +301,7 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
 
     /// returns the lowest value of sketch
     /// a null value is a diagnostic of bad skecthing. As the algorithm suppose
-    /// that the size of the set sketched is large compared to the num ber of sketch this
+    /// that the size of the set sketched is large compared to the number of sketch this
     /// has a very low probability.
     pub fn get_low_sketch(&self) -> i64 {
         return self.lower_k.floor() as i64;
@@ -416,7 +416,7 @@ impl MleCost {
 
     // -ln(1. - x * (b-1)/b) / ln(b) =  -ln(1. - x * (b-1)/b) / (b-1).ln_1p()
     //  then we can distinguish if x < 0 we can use ln_1p for the numerator too
-    //  We now x is in [-1. , 1.] so x * (b-1)/b) is small
+    //  We know x is in [-1. , 1.] so x * (b-1)/b) is small
     fn pb(&self, x : f64) -> f64 {
         let val = if x <= 0. {
             let arg = - x * (self.b - 1.)/ self.b;
@@ -450,10 +450,13 @@ impl CostFunction for  MleCost {
 } 
 
 
-// 
+
 /// This function implements Jaccard joint estimation based on likelyhood estimator
 /// as described in Ertl paper paragraph 3.2.
-/// The stucture needs the parameters used during sketching.  
+/// It is interesting when estimating low Jaccard values (under 0.1), where the setsketch 
+/// estimator can suffer of a loss of precision. Of course it more expensive that
+/// base estimator.
+/// The structure needs the parameters used during sketching.  
 /// **It is the user responsability to use it with skecthes from the same parameters**
 pub struct MleJaccard {
     // b must be <= 2. In fact we use lnb (precomputed log of b)
@@ -532,7 +535,7 @@ impl MleJaccard {
         let aux= card1/card2;
         log::debug!("get_cardinal_estimate : {}", aux);
         let b_sup = aux.min(1./aux);
-        log::debug!("mle_jaccard interval {} ,  {}", b_inf, b_sup);  
+        log::info!("mle_jaccard interval {} ,  {}", b_inf, b_sup);  
         //
         let brentopt = BrentOpt::new(b_inf, b_sup);
         let brentopt = brentopt.set_tolerance(1.0E-5, 1.0E-5);
@@ -546,7 +549,7 @@ impl MleJaccard {
             .unwrap();
 
         // Wait a second (lets the logger flush everything before printing again)
-        std::thread::sleep(std::time::Duration::from_secs(1));
+//        std::thread::sleep(std::time::Duration::from_secs(1));
         log::info!("res : {:#}", res);
 
         let state = res.state();
@@ -584,7 +587,7 @@ mod tests {
         // we can possibly change params.b to check effect
         log::info!("params : {:?}", params);
         //
-        let nb_frac = 20;
+        let nb_frac = 50;
 
         for j in 1..=nb_frac {
             let jac = (j as f64)/ (nb_frac as f64);
@@ -648,12 +651,16 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let vbmax = 20000;
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..vbmax).collect();
-        let inter = 100;  // intersection size
-        let jexact = inter as f32 / vbmax as f32;
-        let nb_sketch = 800;
+        let vb_max = 20000;
+        let vb_min = 10000;
+        //
+        let va_min = 500;
+        let va_max = 10100;
+        //
+        let va : Vec<usize> = (va_min..va_max).collect();
+        let vb : Vec<usize> = (vb_min..vb_max).collect();
+        let jexact = (va_max - vb_min) as f32 / (vb_max - va_min) as f32;
+        let nb_sketch = 4000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -771,14 +778,14 @@ mod tests {
 
     // test to check maximum likelyhood joint estimator at low J
     #[test]
-    fn test_merge_2() {
+    fn test_mle() {
         //
         log_init_test();
         // 
-        let vbmax = 50000;
+        let vbmax = 20000;
         let va : Vec<usize> = (0..1000).collect();
         let vb : Vec<usize> = (900..vbmax).collect();
-        let nb_sketch = 10000;
+        let nb_sketch = 4000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -798,6 +805,7 @@ mod tests {
             return;
         }
         // now we compute intersection between sethasher_a and sethasher_b
+        log::info!("test_mle : vbmax : {}, nbsketch : {}", vbmax, nb_sketch);
         let jac = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
         let jexact = 100 as f32 / vbmax as f32;
         let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
@@ -805,6 +813,9 @@ mod tests {
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
         //
         let mle_jaccard = MleJaccard::from(params);
+
+        let bounds = params.get_jaccard_bounds(jac);
+        log::info!("bounds for jaccard estimate : {:#?}", bounds);
 
         let j = mle_jaccard.get_mle(&sethasher_a.get_signature(), sethasher_b.get_signature());
 
