@@ -234,6 +234,10 @@ impl <'a, I, T, H> SetSketcher<I, T, H>
             b_hasher, t_marker : PhantomData};
     }
 
+    /// return logarithm base of sketches
+    pub fn get_b(&self) -> f64 {
+        self._b
+    }
 
     // We implement algo sketch1 as we will use it for large number of data and so correlation are expected to be very low.
     /// take into account one more data
@@ -778,7 +782,7 @@ mod tests {
 
     // test to check maximum likelyhood joint estimator at low J
     #[test]
-    fn test_mle() {
+    fn test_mle_1() {
         //
         log_init_test();
         // 
@@ -821,5 +825,80 @@ mod tests {
 
     } // end test_merge_2
 
+    #[test]
+    fn test_mle_2() {
+       //
+        log_init_test();
+        // 
+        let vbmax = 20000;
+        let va : Vec<usize> = (0..1000).collect();
+        let vb : Vec<usize> = (900..vbmax).collect();
+        let nb_sketch = 10000;
+        //
+        let mut params = SetSketchParams::default();
+        params.set_m(nb_sketch);
+        //
+        let mut sethasher_a : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+            // now compute sketches
+        let resa = sethasher_a.sketch_slice(&va);
+        if !resa.is_ok() {
+            println!("error in sketcing va");
+            return;
+        }  
+        let mut sethasher_b : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
+        // now compute sketches
+        let resb = sethasher_b.sketch_slice(&vb);
+        if !resb.is_ok() {
+            println!("error in sketcing vb");
+            return;
+        }
+        // now we compute intersection between sethasher_a and sethasher_b
+        let sketch_a = sethasher_a.get_signature();
+        let sketch_b = sethasher_b.get_signature();
+        let jac: f64 = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
+        let jexact = 100 as f32 / vbmax as f32;
+        let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        // 
+        // now e explore around jac to search mle max
+        //
+        let u : f64;
+        let v : f64;
+        // we know we use large value sof m
+        let (card1, _) = sethasher_a.get_cardinal_stats();
+        let (card2, _ ) = sethasher_b.get_cardinal_stats();
+        log::debug!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
+        u = card1 / (card1 + card2);
+        v = card2 / (card1 + card2);
+        // 
+        let mut dplus: u32 = 0;
+        let mut dless : u32 = 0;
+        let mut dequal : u32 = 0;
+        for i in 0..sketch_a.len() {
+            if sketch_a[i] > sketch_b[i] {
+                dplus += 1;
+            }
+            else if sketch_a[i] < sketch_b[i] {
+                dless  += 1;
+            }
+            else {
+                dequal += 1; 
+            }
+        }
+        let cost = MleCost::new(dplus as f64 , dless as f64, dequal as f64, u,v, sethasher_a.get_b());
+
+        let j_mle = cost.cost(&jac).unwrap();
+        for i in 0..10 {
+            let jac_pertu = jac * (1. + i as f64/100.);
+            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
+            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
+        }
+        //
+        for i in 0..10 {
+            let jac_pertu = jac * (1. - i as f64/100.);
+            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
+            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
+        }
+    }
 
 }  // end of mod tests
