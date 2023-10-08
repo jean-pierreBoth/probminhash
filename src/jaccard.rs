@@ -29,7 +29,7 @@ pub fn compute_probminhash_jaccard<D:PartialEq>(siga : &[D], sigb : &[D]) -> f64
 /// with the same number of hash signatures.  
 /// Note that if *jp* is the returned value of this function,  
 /// the distance between siga and sigb, associated to the jaccard index is *1.- jp* 
-pub fn get_jaccard_index_estimate<F: PartialEq + std::fmt::Debug>(siga: &Vec<F>  , sigb: &Vec<F>)  -> Result<f64, ()>  {
+pub fn get_jaccard_index_estimate<F: PartialEq + std::fmt::Debug>(siga: &[F]  , sigb: &[F])  -> Result<f64, ()>  {
     let sig_size = siga.len();
     assert_eq!(sig_size, sigb.len());
     let mut inter = 0;

@@ -13,17 +13,17 @@
 
 
 use serde::{Deserialize, Serialize};
-use serde_json::{to_writer};
+use serde_json::to_writer;
 
 use std::fs::OpenOptions;
-use std::path::{Path};
+use std::path::Path;
 use std::io::{BufReader, BufWriter };
 
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
-use rand_distr::{Exp1};
+use rand_distr::Exp1;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use num::{Integer, ToPrimitive, FromPrimitive, Bounded};
@@ -31,9 +31,9 @@ use num::{Integer, ToPrimitive, FromPrimitive, Bounded};
 use rayon::prelude::*;
 
 
-use argmin::solver::brent::BrentOpt;
 use argmin::core::observers::{ObserverMode, SlogLogger};
-use argmin::core::{CostFunction, Error, Executor};
+use argmin::core::{CostFunction, Executor};
+use argmin::solver::goldensectionsearch::GoldenSectionSearch;
 
 use crate::fyshuffle::*;
 
@@ -514,7 +514,7 @@ impl MleJaccard {
         // we know we use large value sof m
         let card1 = self.get_cardinal_estimate(sketch1);
         let card2 = self.get_cardinal_estimate(sketch2);
-        log::debug!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
+        log::info!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
         let u : f64;
         let v : f64;
         u = card1 / (card1 + card2);
@@ -539,29 +539,100 @@ impl MleJaccard {
         let aux= card1/card2;
         log::debug!("get_cardinal_estimate : {}", aux);
         let b_sup = aux.min(1./aux);
-        log::info!("mle_jaccard interval {} ,  {}", b_inf, b_sup);  
+        log::info!("mle_jaccard interval : ({} ,  {}) , dequal: {}", b_inf, b_sup, dequal); 
+        let jac = dequal as f64/ self.m as f64;
         //
-        let brentopt = BrentOpt::new(b_inf, b_sup);
-        let brentopt = brentopt.set_tolerance(1.0E-5, 1.0E-5);
+        let solver = GoldenSectionSearch::new(b_inf, b_sup).unwrap();
+        let init_param = jac;
         //
         let cost = MleCost::new(dplus as f64 , dless as f64, dequal as f64, u,v, self.b);
 
-        let res = Executor::new(cost, brentopt)
-            .configure(|state| state.max_iters(100))
+        let res = Executor::new(cost, solver)
+            .configure(|state| state.param(init_param).max_iters(100))
             .add_observer(SlogLogger::term(), ObserverMode::Always)
             .run()
             .unwrap();
 
-        // Wait a second (lets the logger flush everything before printing again)
-//        std::thread::sleep(std::time::Duration::from_secs(1));
         log::info!("res : {:#}", res);
 
         let state = res.state();
         log::info!("state : {:#?}", state);
         log::info!("best solution (J): {:#?}, cost : {:#?}", state.best_param, state.best_cost);
 
+        // simple exploration around jac estimate seem better
+        log::info!("\n trying simple exploration : ");
+        struct Best {
+            jac : f64,
+            opt : f64,
+        }
+        let mut best = Best{jac : 0., opt: f64::MAX};
+        for i in 0..5 {
+            let jac_pertu = jac * (1. + i as f64/200.);
+            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
+            if j_mle_pertu < best.opt {
+                best = Best{jac : jac_pertu, opt: j_mle_pertu};
+            }
+            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
+        }
+        //
+        for i in 0..5 {
+            let jac_pertu = jac * (1. - i as f64/200.);
+            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
+            if j_mle_pertu < best.opt {
+                best = Best{jac : jac_pertu, opt: j_mle_pertu};
+            }
+            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
+        }
+        log::info!("jmle : {}, opt : {}", best.jac, best.opt);
+        //
+        let _j_b1 = self.get_mle_approx_b1(sketch1, sketch2).unwrap();
+        //
         return state.best_param;
     } // end of mle_jaccard
+
+
+    fn get_mle_approx_b1<I>(&self, sketch1 : &[I], sketch2 : &[I])  -> Option<f64>
+        where I  : Integer + Bounded + ToPrimitive + FromPrimitive + Copy + Clone + Send + Sync ,
+             [I] : ParallelSlice<I> {
+        //
+        assert_eq!(self.m, sketch1.len() as u64);
+        assert_eq!(self.m, sketch2.len() as u64);
+        // we know we use large value sof m
+        let card1 = self.get_cardinal_estimate(sketch1);
+        let card2 = self.get_cardinal_estimate(sketch2);
+        log::info!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
+        let u : f64;
+        let v : f64;
+        u = card1 / (card1 + card2);
+        v = card2 / (card1 + card2);
+        // 
+        let mut dplus: u32 = 0;
+        let mut dless : u32 = 0;
+        let mut dequal : u32 = 0;
+        for i in 0..sketch1.len() {
+            if sketch1[i] > sketch2[i] {
+                dplus += 1;
+            }
+            else if sketch1[i] < sketch2[i] {
+                dless  += 1;
+            }
+            else {
+                dequal += 1; 
+            }
+        }
+        let dplus = dplus as f64;
+        let dless = dless as f64;
+        let dequal : f64 = dequal as f64;
+        let mut aux = u *u * (dless + dequal) - v * v * (dplus + dequal);
+        aux = aux * aux;
+        let mut j : f64 = u *u * (dless + dequal) + v * v * (dplus + dequal) - (aux + 4. * dless * dplus * (u*v) * (u*v)).sqrt();
+        j =j / (2.* u *v * self.m as f64);
+        //
+        log::info!(" j mle approx for b -> 1 : {:?}", j);
+        // 
+        return Some(j);
+    } // end of get_mle_approx_b1
+
 
 } // end of impl MleJaccard
 
@@ -574,7 +645,7 @@ mod tests {
     use super::*;
     use fnv::FnvHasher;
     use crate::jaccard::*;
-    use rand::distributions::{Uniform};
+    use rand::distributions::Uniform;
 
     #[allow(dead_code)]
     fn log_init_test() {
@@ -781,15 +852,20 @@ mod tests {
 
 
     // test to check maximum likelyhood joint estimator at low J
-    #[test]
+    // shows that mle not better than standard jaccard estimate.
+#[test]
+//#[allow(unused)]
     fn test_mle_1() {
         //
         log_init_test();
         // 
-        let vbmax = 20000;
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..vbmax).collect();
-        let nb_sketch = 4000;
+        let vbmax = 2000;
+        let vbmin = 995;
+        let vamax = 1000;
+        assert!(vamax > vbmin);
+        let va : Vec<usize> = (0..vamax).collect();
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let nb_sketch = 6000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -811,94 +887,20 @@ mod tests {
         // now we compute intersection between sethasher_a and sethasher_b
         log::info!("test_mle : vbmax : {}, nbsketch : {}", vbmax, nb_sketch);
         let jac = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
-        let jexact = 100 as f32 / vbmax as f32;
+        let jexact = (vamax - vbmin) as f32 / vbmax as f32;
         let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
         log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
-        //
+        // check for mle estimator
         let mle_jaccard = MleJaccard::from(params);
-
         let bounds = params.get_jaccard_bounds(jac);
         log::info!("bounds for jaccard estimate : {:#?}", bounds);
 
         let j = mle_jaccard.get_mle(&sethasher_a.get_signature(), sethasher_b.get_signature());
+        log::info!("j mle : {}", j.unwrap());
+    } // end test_mle_1
 
-    } // end test_merge_2
+ 
 
-    #[test]
-    fn test_mle_2() {
-       //
-        log_init_test();
-        // 
-        let vbmax = 20000;
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..vbmax).collect();
-        let nb_sketch = 10000;
-        //
-        let mut params = SetSketchParams::default();
-        params.set_m(nb_sketch);
-        //
-        let mut sethasher_a : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
-            // now compute sketches
-        let resa = sethasher_a.sketch_slice(&va);
-        if !resa.is_ok() {
-            println!("error in sketcing va");
-            return;
-        }  
-        let mut sethasher_b : SetSketcher<u16, usize, FnvHasher>= SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default()); 
-        // now compute sketches
-        let resb = sethasher_b.sketch_slice(&vb);
-        if !resb.is_ok() {
-            println!("error in sketcing vb");
-            return;
-        }
-        // now we compute intersection between sethasher_a and sethasher_b
-        let sketch_a = sethasher_a.get_signature();
-        let sketch_b = sethasher_b.get_signature();
-        let jac: f64 = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
-        let jexact = 100 as f32 / vbmax as f32;
-        let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
-        // 
-        // now e explore around jac to search mle max
-        //
-        let u : f64;
-        let v : f64;
-        // we know we use large value sof m
-        let (card1, _) = sethasher_a.get_cardinal_stats();
-        let (card2, _ ) = sethasher_b.get_cardinal_stats();
-        log::debug!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
-        u = card1 / (card1 + card2);
-        v = card2 / (card1 + card2);
-        // 
-        let mut dplus: u32 = 0;
-        let mut dless : u32 = 0;
-        let mut dequal : u32 = 0;
-        for i in 0..sketch_a.len() {
-            if sketch_a[i] > sketch_b[i] {
-                dplus += 1;
-            }
-            else if sketch_a[i] < sketch_b[i] {
-                dless  += 1;
-            }
-            else {
-                dequal += 1; 
-            }
-        }
-        let cost = MleCost::new(dplus as f64 , dless as f64, dequal as f64, u,v, sethasher_a.get_b());
+}
 
-        let j_mle = cost.cost(&jac).unwrap();
-        for i in 0..10 {
-            let jac_pertu = jac * (1. + i as f64/100.);
-            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
-            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
-        }
-        //
-        for i in 0..10 {
-            let jac_pertu = jac * (1. - i as f64/100.);
-            let j_mle_pertu = cost.cost(&jac_pertu).unwrap();
-            log::info!(" j : {}, le : {} ", jac_pertu, j_mle_pertu);
-        }
-    }
-
-}  // end of mod tests

@@ -14,7 +14,7 @@
 
 use log::trace;
 
-use std::{cmp};
+use std::cmp;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
@@ -22,7 +22,7 @@ use rand::distributions::*;
 use rand_distr::uniform::SampleUniform;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
-use num::{Float};
+use num::Float;
 
 
 #[allow(unused_imports)]
@@ -123,6 +123,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : Hasher+Default> 
         // If we initialize by f64::MAX we got a bug beccause f64::MAX as usize is 0! in cmp::min(skect, m-1) in j_2 line 216
         // computation in sketch_batch. 
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
+        // ensure validity of inequality of line 215.
+        assert!(size < large.to_usize().unwrap());
         for _i in 0..size {
             sketch_init.push(large);
             q_init.push(-1);
