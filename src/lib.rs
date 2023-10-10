@@ -16,7 +16,7 @@ pub mod probminhasher;
 
 pub mod superminhasher;
 pub mod setsketcher;
-pub mod fastdensminhash;
+pub mod densminhash;
 
 // we keep it in case. give integer signature but slower!
 #[cfg(feature="sminhash2")]
