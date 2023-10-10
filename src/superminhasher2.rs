@@ -298,7 +298,7 @@ pub fn get_jaccard_index_estimate<F: PartialEq + num::Zero + std::fmt::Debug>(hs
 mod tests {
     use super::*;
     use fnv::FnvHasher;
-    use twox_hash::{XxHash32};
+    use twox_hash::XxHash32;
 
     #[allow(dead_code)]
     fn log_init_test() {

@@ -196,7 +196,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
         while nb_empty > 0 {
             for k in 0..m { 
                 if self.values[k].is_some() {
-                    let mut rng2 = Xoshiro256PlusPlus::seed_from_u64((k as u64 +1) * m as u64 + pass + 253713);
+                    let mut rng2 = WyRng::seed_from_u64((k as u64 +1) * m as u64 + pass + 253713);
                     let j: usize = Uniform::<usize>::new(0, m).sample(&mut rng2);
            //         let j : usize = xxhash32( , )
                     if self.values[j].is_none() {
