@@ -317,11 +317,14 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..2000).collect();
-        let inter = 100;
-        let jexact = inter as f32 / 2000.;
-        let size = 100;
+        let vamax = 1000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 990;
+        let vbmax = 2000;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 10000;
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : SuperMinHash<f64, usize, FnvHasher>= SuperMinHash::new(size, bh);
@@ -341,10 +344,10 @@ mod tests {
         let skb = sminhash.get_hsketch();
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let sigma = (jexact * (1.- jexact) / size as f32).sqrt();
+        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
         log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac as f32) < jexact + 3. *sigma);
+        assert!( jac > 0. && jac < jexact + 3. *sigma);
     } // end of test_range_intersection_fnv_f64
 
 

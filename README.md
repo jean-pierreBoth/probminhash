@@ -19,7 +19,6 @@ This module is the core of the crate which has two other modules.
 
 * Superminhash
 
-An implementation of Superminhash :  
 **A new minwise Hashing Algorithm for Jaccard Similarity Estimation**
 Otmar Ertl 2017-2018 Cf [superminhash Ertl](https://arxiv.org/abs/1706.05698)
 
@@ -31,8 +30,7 @@ It runs in one pass on data so it can be used in streaming.
 A variant of this algorithm, **Superminhash2**, sketch data into u32/u64 vectors but is slower. It is accessed with the **sminhash2** feature.
 
 * SetSketch  
-  
-An implementation of the SetSketch :
+    
 **SetSketch: Filling the gap between MinHash and HyperLogLog**
 Otmar Ertl 2021 [arxiv](https://arxiv.org/abs/2101.00314) or [vldb](https://vldb.org/pvldb/vol14/p2244-ertl.pdf)
 
@@ -42,6 +40,10 @@ We provide sketching (adapted to LSH with Jaccard distance) and a cardinality es
 * ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  
 It is inspired by *Marcais.G et al. BioInformatics 2019*, see  [Marcais](https://academic.oup.com/bioinformatics/article/35/14/i127/5529166)
 
+* Densification algorithms above One Permutation Hashing (known as OPH)  
+    **Optimal Densification for Fast and Accurate Minwise Hashing**.   
+    Anshumali Shrivastava 2017 [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html).
+    
 * Invhash
   
 It is just a module providing invertible hash from u32 to u32 or u64 to u64 and can be used to run a prehash on indexes.

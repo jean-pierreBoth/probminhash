@@ -1,13 +1,18 @@
-//! implementation of the paper:
-//! On densification for MinWise Hashing
-//! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha
-//! [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
+//! Implementation of densification algorithms above One Permutation Hashing.  
+//! They provides locally sensitive sketching of unweighted data in one pass.
 //! 
-//! It provides  locally sensitive sketching of unweighted data with densification
+//! - Optimal Densification for Fast and Accurate Minwise Hashing.   
+//! Anshumali Shrivastava
+//! Proceedings of the 34 th International Conference on Machine 2017.
+//! [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html)
+//! 
+//! - On densification for MinWise Hashing.  
+//! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
+//! 
 
 
 
-use std::cmp;
+
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
 use rand::prelude::*;
@@ -19,7 +24,8 @@ use wyhash::WyRng;
 use num::Float;
 
 
-
+/// Optimal Densification for Fast and Accurate Minwise Hashing.   
+/// For usual cases where the data size to sketch is larger than the sketch size this algorithm is optimal.
 pub struct OptDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
@@ -48,7 +54,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
     } // end of new
 
 
-       /// Reinitialize minhasher, keeping size of sketches.  
+    /// Reinitialize minhasher, keeping size of sketches.  
     /// SuperMinHash can then be reinitialized and used again with sketch_slice.
     /// This methods puts an end to a streaming sketching of data and resets all counters.
     pub fn reinit(&mut self) {
@@ -92,7 +98,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
         let inrange = Uniform::<usize>::new(0, m);
         for k in 0..m { 
             if self.values[k].is_none() {
-                // change hash function for each, item. rng has no loop and provides independance so we get universal hash function
+                // change hash function for each, item. rng has no loop at expected horizon and provides independance so we get universal hash function
                 let mut rng2 = WyRng::seed_from_u64(k as u64 + 123743);
                 loop {
                     // we search a non empty bin to fill slot k
@@ -125,8 +131,10 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
 /// On densification for MinWise Hashing
 /// Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha
 /// [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
+/// 
+/// This algorithm may have a better variance if there are many empty bins at first pass of OPH.
 ///
-pub struct FastDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
+pub struct RevOptDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
     /// stored data giving minima
@@ -138,10 +146,10 @@ pub struct FastDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
 }  // end of struct FastDensMinHash
 
 
-impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Default> FastDensMinHash<F, T, H> {
+impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Default> RevOptDensMinHash<F, T, H> {
     /// allocate a struct to do superminhash.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
-    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> FastDensMinHash<F, T, H> {
+    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> RevOptDensMinHash<F, T, H> {
         let mut sketch_init = Vec::<F>::with_capacity(size);
         let mut values = Vec::<Option<T>>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
@@ -149,7 +157,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
             sketch_init.push(large);
             values.push(None);
         }
-        FastDensMinHash{hsketch: sketch_init, values,b_hasher: build_hasher, t_marker : PhantomData,}
+        RevOptDensMinHash{hsketch: sketch_init, values,b_hasher: build_hasher, t_marker : PhantomData,}
     } // end of new
 
     /// Reinitialize minhasher, keeping size of sketches.  
@@ -169,6 +177,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
         return &self.hsketch;
     }
 
+    /// implementation of sketching as in Algorithm1 in paragraph3 of [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
     pub fn sketch_slice(&mut self, to_sketch : &[T]) -> Result <(),()> {
 
         let m = self.hsketch.len();
@@ -198,7 +207,6 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
                 if self.values[k].is_some() {
                     let mut rng2 = WyRng::seed_from_u64((k as u64 +1) * m as u64 + pass + 253713);
                     let j: usize = Uniform::<usize>::new(0, m).sample(&mut rng2);
-           //         let j : usize = xxhash32( , )
                     if self.values[j].is_none() {
                         self.values[j] = self.values[k];
                         self.hsketch[j] = self.hsketch[k];
@@ -236,6 +244,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
 
 } // end of impl FastDensMinHash
 
+//===================================================================================================
 
 
 #[cfg(test)]
@@ -253,60 +262,85 @@ mod tests {
 
 
     #[test]
-    fn test_fastdens_intersection_fnv_f64() {
+    fn test_fastdens_manybins_fnv_f64() {
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
         let vamax = 1000;
         let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 990;
+        let vbmin = 900;
         let vbmax = 2000;
         let vb : Vec<usize> = (vbmin..vbmax).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 100000;
+        let size = 50000;
         //
-        let bh = BuildHasherDefault::<FnvHasher>::default();
-        let mut sminhash : FastDensMinHash<f64, usize, FnvHasher>= FastDensMinHash::new(size, bh);
-        // now compute sketches
-        let resa = sminhash.sketch_slice(&va);
-        if !resa.is_ok() {
-            println!("error in sketcing va");
-            return;
-        }
-        let ska = sminhash.get_hsketch().clone();
-        sminhash.reinit();
-        let resb = sminhash.sketch_slice(&vb);
-        if !resb.is_ok() {
-            println!("error in sketching vb");
-            return;
-        }
-        let skb = sminhash.get_hsketch();
+        test_fastdens(&va, &vb, jexact, size);
+    } // end of test_fastdens_intersection_fnv_f64
+
+
+    #[test]
+    fn test_fastdens_fewbins_fnv_f64() {
+        log_init_test();
+        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
-        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
-        // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac - jexact).abs() < 3. *sigma);
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 50000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 50000;
+        //
+        test_fastdens(&va, &vb, jexact, size);
     } // end of test_fastdens_intersection_fnv_f64
 
 
 
     #[test]
-    fn test_optdens_intersection_fnv_f64() {
+    fn test_optdens_manybins_fnv_f64() {
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
         let vamax = 1000;
         let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 990;
+        let vbmin = 900;
         let vbmax = 2000;
         let vb : Vec<usize> = (vbmin..vbmax).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 100000;
+        let size = 50000;       
+        //
+        test_optdens(&va, &vb, jexact, size);
+    } // end of test_optdens_intersection_fnv_f64
+
+
+
+    #[test]
+    fn test_optdens_fewbins_fnv_f64() {
+        log_init_test();
+        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
+        //
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 50000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 50000;
+        //
+        test_optdens(&va, &vb, jexact, size);
+    } // end of test_optdens_intersection_fnv_f64
+
+
+
+    fn test_optdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  {
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : OptDensMinHash<f64, usize, FnvHasher>= OptDensMinHash::new(size, bh);
@@ -330,7 +364,34 @@ mod tests {
         log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         assert!( jac > 0. && (jac - jexact).abs() < 3. *sigma);
-    } // end of test_optdens_intersection_fnv_f64
+    } // end of test_optdens
 
+
+
+    fn test_fastdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  {
+        //
+        let bh = BuildHasherDefault::<FnvHasher>::default();
+        let mut sminhash : RevOptDensMinHash<f64, usize, FnvHasher>= RevOptDensMinHash::new(size, bh);
+        // now compute sketches
+        let resa = sminhash.sketch_slice(&va);
+        if !resa.is_ok() {
+            println!("error in sketcing va");
+            return;
+        }
+        let ska = sminhash.get_hsketch().clone();
+        sminhash.reinit();
+        let resb = sminhash.sketch_slice(&vb);
+        if !resb.is_ok() {
+            println!("error in sketching vb");
+            return;
+        }
+        let skb = sminhash.get_hsketch();
+        //
+        let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
+        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
+        // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
+        assert!( jac > 0. && (jac - jexact).abs() < 3. *sigma);
+    } // end of test_fastdens
 
 } // end of tests
