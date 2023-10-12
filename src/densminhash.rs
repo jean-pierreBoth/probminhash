@@ -25,7 +25,8 @@ use num::Float;
 
 
 /// Optimal Densification for Fast and Accurate Minwise Hashing.   
-/// For usual cases where the data size to sketch is larger than the sketch size this algorithm is optimal.
+/// For usual cases where the data size to sketch is larger or of size of same size as the sketch size this algorithm is optimal.
+/// In case of sketch size really larger than data to sketch, consider using RevOptDensMinHash
 pub struct OptDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
@@ -132,7 +133,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
 /// Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha
 /// [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 /// 
-/// This algorithm may have a better variance if there are many empty bins at first pass of OPH.
+/// This algorithm may have a better variance if for some reason the sketch size can be much greater
+/// than the data to sketch. (In which case encounter empty bins and the sketch needs very robust densification.
 ///
 pub struct RevOptDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
@@ -260,7 +262,8 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-
+/// This test how jaccard estimator behave in case where data size is an order of magnitude
+/// larger than sketch size. 
     #[test]
     fn test_optdens_manybins_fnv_f64() {
         log_init_test();
@@ -276,7 +279,7 @@ mod tests {
         let jexact = inter as f64 / vbmax as f64;
         let size = 1000;
         let nbtest: usize = 50;       
-        //
+        // growing nbtest up to 100 shows we get out of 3 sigma as test_revoptdens_manybins_fnv_f64 still OK.
         let mut deltavec = Vec::<f64>::with_capacity(nbtest);
         for j in 1..nbtest {
             let sketch_size = size * j;
@@ -287,6 +290,7 @@ mod tests {
         }
         let mean_delta = deltavec.iter().sum::<f64>()/deltavec.len() as f64;
         log::info!("test_optdens_manybins_fnv_f64 mean delta-j/sigma : {:.3e}", mean_delta);
+        //
     } // end of test_optdens_manybins_fnv_f64
 
 
