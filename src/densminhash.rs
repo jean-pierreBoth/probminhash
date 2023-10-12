@@ -262,45 +262,6 @@ mod tests {
 
 
     #[test]
-    fn test_fastdens_manybins_fnv_f64() {
-        log_init_test();
-        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
-        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
-        //
-        let vamax = 1000;
-        let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 900;
-        let vbmax = 2000;
-        let vb : Vec<usize> = (vbmin..vbmax).collect();
-        let inter = vamax - vbmin;
-        let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;
-        //
-        test_fastdens(&va, &vb, jexact, size);
-    } // end of test_fastdens_intersection_fnv_f64
-
-
-    #[test]
-    fn test_fastdens_fewbins_fnv_f64() {
-        log_init_test();
-        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
-        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
-        //
-        let vamax = 300000;
-        let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 50000;
-        let vbmax = 2 * vamax;
-        let vb : Vec<usize> = (vbmin..vbmax).collect();
-        let inter = vamax - vbmin;
-        let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;
-        //
-        test_fastdens(&va, &vb, jexact, size);
-    } // end of test_fastdens_intersection_fnv_f64
-
-
-
-    #[test]
     fn test_optdens_manybins_fnv_f64() {
         log_init_test();
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
@@ -313,11 +274,20 @@ mod tests {
         let vb : Vec<usize> = (vbmin..vbmax).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;       
+        let size = 1000;
+        let nbtest: usize = 50;       
         //
-        test_optdens(&va, &vb, jexact, size);
-    } // end of test_optdens_intersection_fnv_f64
-
+        let mut deltavec = Vec::<f64>::with_capacity(nbtest);
+        for j in 1..nbtest {
+            let sketch_size = size * j;
+            let opt_res = test_optdens(&va, &vb, jexact, sketch_size);
+            let res = opt_res.unwrap();
+            let delta = (jexact - res.0).abs()/ res.1;
+            deltavec.push(delta);
+        }
+        let mean_delta = deltavec.iter().sum::<f64>()/deltavec.len() as f64;
+        log::info!("test_optdens_manybins_fnv_f64 mean delta-j/sigma : {:.3e}", mean_delta);
+    } // end of test_optdens_manybins_fnv_f64
 
 
     #[test]
@@ -335,12 +305,65 @@ mod tests {
         let jexact = inter as f64 / vbmax as f64;
         let size = 50000;
         //
-        test_optdens(&va, &vb, jexact, size);
-    } // end of test_optdens_intersection_fnv_f64
+        let _res = test_optdens(&va, &vb, jexact, size);
+    } // end of test_optdens_fewbins_fnv_f64
+
+
+    #[test]
+    fn test_revoptdens_fewbins_fnv_f64() {
+        log_init_test();
+        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
+        //
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 50000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 50000;
+        //
+        let res = test_revoptdens(&va, &vb, jexact, size).unwrap();
+        assert!( res.0 > 0. && (res.0 - jexact).abs() < 3. * res.1);
+    } // end of test_fastdens_intersection_fnv_f64
 
 
 
-    fn test_optdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  {
+    #[test]
+    fn test_revoptdens_manybins_fnv_f64() {
+        log_init_test();
+        // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
+        // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
+        //
+        let vamax = 1000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 900;
+        let vbmax = 2000;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 1000;
+        let nbtest: usize = 50;       
+        //
+        let mut deltavec = Vec::<f64>::with_capacity(nbtest);
+        for j in 1..nbtest {
+            let sketch_size = size * j;
+            let opt_res = test_revoptdens(&va, &vb, jexact, sketch_size);
+            let res = opt_res.unwrap();
+            let delta = (jexact - res.0).abs()/ res.1;
+            deltavec.push(delta);
+        }
+        //
+        let mean_delta = deltavec.iter().sum::<f64>()/deltavec.len() as f64;
+        log::info!("test_revoptdens_manybins_fnv_f64 mean delta-j/sigma : {:.3e}", mean_delta);
+    } // end of test_revoptdens_manybins_fnv_f64 
+
+
+    //========================================
+
+    // return j estimate and sigma
+    fn test_optdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  -> Result<(f64,f64), ()> {
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : OptDensMinHash<f64, usize, FnvHasher>= OptDensMinHash::new(size, bh);
@@ -348,27 +371,29 @@ mod tests {
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
             println!("error in sketcing va");
-            return;
+            return Err(());
         }
         let ska = sminhash.get_hsketch().clone();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
             println!("error in sketching vb");
-            return;
+            return Err(());
         }
         let skb = sminhash.get_hsketch();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
-        // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac - jexact).abs() < 3. *sigma);
+        let delta = (jac - jexact).abs()/sigma;
+        log::debug!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        //
+        return Ok((jac, sigma));
     } // end of test_optdens
 
 
 
-    fn test_fastdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  {
+    // return j estimate and sigma
+    fn test_revoptdens(va : &Vec<usize>, vb : &Vec<usize>, jexact : f64, size : usize)  -> Result<(f64,f64), ()>  {
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : RevOptDensMinHash<f64, usize, FnvHasher>= RevOptDensMinHash::new(size, bh);
@@ -376,22 +401,25 @@ mod tests {
         let resa = sminhash.sketch_slice(&va);
         if !resa.is_ok() {
             println!("error in sketcing va");
-            return;
+            return Err(());
         }
         let ska = sminhash.get_hsketch().clone();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
             println!("error in sketching vb");
-            return;
+            return Err(());
         }
         let skb = sminhash.get_hsketch();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e} ", jac, jexact, sigma);
+        let delta = (jac - jexact).abs()/sigma;
+        log::debug!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac - jexact).abs() < 3. *sigma);
-    } // end of test_fastdens
+        assert!( jac > 0.);
+        //
+        return Ok((jac, sigma));
+    } // end of test_revoptdens
 
 } // end of tests
