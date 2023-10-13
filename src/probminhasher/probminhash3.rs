@@ -12,7 +12,7 @@
 #[allow(unused_imports)]
 use log::{trace,debug};
 
-use std::fmt::{Debug};
+use std::fmt::Debug;
 
 use num;
 
@@ -21,7 +21,7 @@ use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
-use indexmap::{IndexMap};
+use indexmap::IndexMap;
 use std::collections::HashMap;
 
 use crate::maxvaluetrack::*;
@@ -370,7 +370,7 @@ mod tests {
 
 use log::*;
 
-use indexmap::{IndexMap};
+use indexmap::IndexMap;
 use fnv::{FnvHasher,FnvBuildHasher};
 
 type FnvIndexMap<K, V> = IndexMap<K, V, FnvBuildHasher>;

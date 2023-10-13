@@ -7,9 +7,6 @@ extern crate lazy_static;
 
 mod maxvaluetrack;
 
-pub mod exp01;
-pub mod fyshuffle;
-pub mod weightedset;
 pub mod jaccard;
 
 pub mod probminhasher;
@@ -18,6 +15,10 @@ pub mod superminhasher;
 pub mod setsketcher;
 pub mod densminhash;
 
+
+pub mod exp01;
+pub mod fyshuffle;
+pub mod weightedset;
 // we keep it in case. give integer signature but slower!
 #[cfg(feature="sminhash2")]
 pub mod superminhasher2;
