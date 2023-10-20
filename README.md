@@ -37,12 +37,20 @@ Otmar Ertl 2021 [arxiv](https://arxiv.org/abs/2101.00314) or [vldb](https://vldb
 This algorithm runs on unweighted objects. It is slower than SuperMinHash but can sketch billions of objects into vectors of 16 bytes integers. Morever sketches are mergeable.  
 We provide sketching (adapted to LSH with Jaccard distance) and a cardinality estimator of the sketched set.
 
+* Densification algorithms above One Permutation Hashing (known as OPH).    
+  
+    - **Optimal Densification for Fast and Accurate Minwise Hashing**.   
+    Anshumali Shrivastava 2017 [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html).
+
+    - **On densification for MinWise Hashing.**  
+    Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
+
+
+
 * ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  
 It is inspired by *Marcais.G et al. BioInformatics 2019*, see  [Marcais](https://academic.oup.com/bioinformatics/article/35/14/i127/5529166)
 
-* Densification algorithms above One Permutation Hashing (known as OPH)  
-    **Optimal Densification for Fast and Accurate Minwise Hashing**.   
-    Anshumali Shrivastava 2017 [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html).
+
     
 * Invhash
   

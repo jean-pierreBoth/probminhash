@@ -25,7 +25,7 @@ use num::Float;
 
 
 /// Optimal Densification for Fast and Accurate Minwise Hashing.  
-/// Provides a sketch with values Vec\<F\> or Vec\<u64\> depending on the need.
+/// Provides a sketch with values Vec\<F\> with F:Float or Vec\<u64\> depending on the need.
 /// 
 /// For usual cases where the data size to sketch is larger or of size of same size as the sketch size this algorithm is optimal.
 /// In case of sketch size really larger than data to sketch, consider using RevOptDensMinHash
@@ -58,8 +58,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
 
 
     /// Reinitialize minhasher, keeping size of sketches.  
-    /// SuperMinHash can then be reinitialized and used again with sketch_slice.
-    /// This methods puts an end to a streaming sketching of data and resets all counters.
+    /// OptMinDens is reinitialized and can be used again to sketch a new slice
+    /// This methods puts an end to sketching a slice of data and resets all counters, required before sketching a new slice of data
     pub fn reinit(&mut self) {
         let size = self.hsketch.len();
         let large:F = F::from(u32::MAX).unwrap();
@@ -69,7 +69,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         }
     }
 
-    /// returns a reference to computed sketches
+    /// returns a reference to computed sketches of type F:Float
     pub fn get_hsketch(&self) -> &Vec<F> {
         return &self.hsketch;
     }
@@ -142,26 +142,26 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
 /// [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 /// 
 /// This algorithm may have a better variance if for some reason the sketch size can be much greater
-/// than the data to sketch. (In which case encounter empty bins and the sketch needs very robust densification.
+/// than the data to sketch. (In which case apparition of empty bins in the sketch needs very robust densification).
 ///
-pub struct RevOptDensMinHash<F: Float, T: Hash, H: Hasher+Default> {
+pub struct RevOptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
     /// stored data giving minima
-    values:Vec<Option<T>>,
+    values:Vec<Option<u64>>,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
-    t_marker: PhantomData<T>,
+    t_marker: PhantomData<D>,
 }  // end of struct FastDensMinHash
 
 
-impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Default> RevOptDensMinHash<F, T, H> {
+impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Default> RevOptDensMinHash<F, D, H> {
     /// allocate a struct to do superminhash.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
-    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> RevOptDensMinHash<F, T, H> {
+    pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> RevOptDensMinHash<F, D, H> {
         let mut sketch_init = Vec::<F>::with_capacity(size);
-        let mut values = Vec::<Option<T>>::with_capacity(size);
+        let mut values = Vec::<Option<u64>>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
         for _i in 0..size {
             sketch_init.push(large);
@@ -171,8 +171,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
     } // end of new
 
     /// Reinitialize minhasher, keeping size of sketches.  
-    /// SuperMinHash can then be reinitialized and used again with sketch_slice.
-    /// This methods puts an end to a streaming sketching of data and resets all counters.
+    /// This methods puts an end to sketching a slice of data and resets all counters.
     pub fn reinit(&mut self) {
         let size = self.hsketch.len();
         let large:F = F::from(u32::MAX).unwrap();
@@ -182,13 +181,21 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
         }
     }
 
-    /// returns a reference to computed sketches
+    /// returns a reference to computed sketches of type F:Float
     pub fn get_hsketch(&self) -> &Vec<F> {
         return &self.hsketch;
     }
 
+    /// returns a u64 signature. (requires a reallocation)
+    pub fn get_hsketch_u64(&self) -> Vec<u64> {
+        let usketch : Vec<u64> = self.values.iter().map(|t| t.unwrap()).collect();
+        return usketch;
+    }
+
+    
+    /// Sketch a slice of data of type D.  
     /// implementation of sketching as in Algorithm1 in paragraph3 of [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
-    pub fn sketch_slice(&mut self, to_sketch : &[T]) -> Result <(),()> {
+    pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
 
         let m = self.hsketch.len();
         let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
@@ -202,7 +209,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
             let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
             if r <= self.hsketch[k] {
                 self.hsketch[k] = r;
-                self.values[k] = Some(*d);
+                self.values[k] = Some(hval1);
             }
         }
         let mut nb_empty : usize = self.values.iter().map(|x| if x.is_none() { 1} else {0}).sum();
@@ -236,23 +243,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash + Copy,  H : Hasher+Def
 
 
 
-
-    /// returns an estimator of jaccard index between the sketch in this structure and the sketch passed as arg
-    pub fn get_jaccard_index_estimate(&self, other_sketch : &Vec<F>)  -> Result<f64, ()> {
-        if other_sketch.len() != self.hsketch.len() {
-            return Err(());
-        }
-        let mut count:usize = 0;
-        for i in 0..self.hsketch.len() {
-            if self.hsketch[i] == other_sketch[i] {
-                log::trace!(" intersection {:?} ", self.hsketch[i]);
-                count += 1;
-            }             
-        }
-        return Ok(count as f64/other_sketch.len() as f64);
-    }  // end of get_jaccard_index_estimate
-
-} // end of impl FastDensMinHash
+} // end of impl RevOptDensMinHash
 
 //===================================================================================================
 
@@ -399,14 +390,14 @@ mod tests {
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
         let delta = (jac - jexact).abs()/sigma;
-        log::debug!(" Float sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        log::info!(" Float sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
         //
         // check result with u64 signature
         //
         let jac = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
         let delta = (jac - jexact).abs()/sigma;
-        log::debug!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
         //
         return Ok((jac, sigma));
     } // end of test_optdens
@@ -425,6 +416,7 @@ mod tests {
             return Err(());
         }
         let ska = sminhash.get_hsketch().clone();
+        let ska_u64 = sminhash.get_hsketch_u64();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -432,13 +424,21 @@ mod tests {
             return Err(());
         }
         let skb = sminhash.get_hsketch();
+        let skb_u64 = sminhash.get_hsketch_u64();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
         let delta = (jac - jexact).abs()/sigma;
-        log::debug!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         assert!( jac > 0.);
+        //
+        // check result with u64 signature
+        //
+        let jac = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
+        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
+        let delta = (jac - jexact).abs()/sigma;
+        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
         //
         return Ok((jac, sigma));
     } // end of test_revoptdens
