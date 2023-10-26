@@ -33,7 +33,9 @@ pub struct OptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
     /// stored data giving minima
-    values:Vec<Option<u64>>,
+    values:Vec<u64>,
+    ///
+    init : Vec<bool>,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -47,13 +49,15 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
     pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> OptDensMinHash<F, D, H> {
         let mut sketch_init = Vec::<F>::with_capacity(size);
-        let mut values = Vec::<Option<u64>>::with_capacity(size);
+        let mut values = Vec::<u64>::with_capacity(size);
+        let mut init  = Vec::<bool>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
         for _i in 0..size {
             sketch_init.push(large);
-            values.push(None);
+            values.push(u64::MAX);
+            init.push(false);
         }
-        OptDensMinHash{hsketch: sketch_init, values,b_hasher: build_hasher, t_marker : PhantomData,}
+        OptDensMinHash{hsketch: sketch_init, values, init, b_hasher: build_hasher, t_marker : PhantomData,}
     } // end of new
 
 
@@ -65,7 +69,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let large:F = F::from(u32::MAX).unwrap();
         for i in 0..size {
             self.hsketch[i] = large;
-            self.values[i] = None;
+            self.values[i] = u64::MAX;
+            self.init[i] = false;
         }
     }
 
@@ -74,10 +79,9 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         return &self.hsketch;
     }
 
-    /// returns a u64 signature. (requires a reallocation)
-    pub fn get_hsketch_u64(&self) -> Vec<u64> {
-        let usketch : Vec<u64> = self.values.iter().map(|t| t.unwrap()).collect();
-        return usketch;
+    /// returns a u64 signature.
+    pub fn get_hsketch_u64(&self) -> &Vec<u64> {
+        return &self.values;
     }
     
     pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
@@ -94,10 +98,11 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
             if r <= self.hsketch[k] {
                 self.hsketch[k] = r;
-                self.values[k] = Some(hval1);
+                self.values[k] = hval1;
+                self.init[k] = true;
             }
         }
-        let nb_empty : usize = self.values.iter().map(|x| if x.is_none() { 1} else {0}).sum();
+        let nb_empty : usize = self.init.iter().map(|x| if *x  { 0 } else {1}).sum();
         log::debug!("optdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, nb_empty);
         if nb_empty == 0 {
             return Ok(());
@@ -106,15 +111,16 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let mut nbpass = 1u64;
         let inrange = Uniform::<usize>::new(0, m);
         for k in 0..m { 
-            if self.values[k].is_none() {
+            if self.init[k] == false {
                 // change hash function for each, item. rng has no loop at expected horizon and provides independance so we get universal hash function
                 let mut rng2 = WyRng::seed_from_u64(k as u64 + 123743);
                 loop {
                     // we search a non empty bin to fill slot k
                     let j: usize = inrange.sample(&mut rng2);
-                    if self.values[j].is_some() {
+                    if self.init[j] {
                         self.values[k] = self.values[j];
                         self.hsketch[k] = self.hsketch[j];
+                        self.init[k] = true;
                         break;                       
                     }
                     nbpass += 1;
@@ -122,7 +128,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             }   
         }
         //
-        let nb_empty : usize = self.values.iter().map(|x| if x.is_none() { 1} else {0}).sum();
+        let nb_empty : usize = self.init.iter().map(|x| if *x { 0} else {1}).sum();
         log::debug!("end of pass {}, nb empty : {}", nbpass, nb_empty);      
         assert_eq!(nb_empty, 0);
         //
@@ -148,7 +154,9 @@ pub struct RevOptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
     /// stored data giving minima
-    values:Vec<Option<u64>>,
+    values:Vec<u64>,
+    /// initialized status
+    init : Vec<bool>,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -161,13 +169,15 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
     pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> RevOptDensMinHash<F, D, H> {
         let mut sketch_init = Vec::<F>::with_capacity(size);
-        let mut values = Vec::<Option<u64>>::with_capacity(size);
+        let mut values: Vec<u64> = Vec::<u64>::with_capacity(size);
+        let mut init: Vec<bool> = Vec::<bool>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
         for _i in 0..size {
             sketch_init.push(large);
-            values.push(None);
+            values.push(u64::MAX);
+            init.push(false);
         }
-        RevOptDensMinHash{hsketch: sketch_init, values,b_hasher: build_hasher, t_marker : PhantomData,}
+        RevOptDensMinHash{hsketch: sketch_init, values, init, b_hasher: build_hasher, t_marker : PhantomData,}
     } // end of new
 
     /// Reinitialize minhasher, keeping size of sketches.  
@@ -177,7 +187,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let large:F = F::from(u32::MAX).unwrap();
         for i in 0..size {
             self.hsketch[i] = large;
-            self.values[i] = None;
+            self.values[i] = u64::MAX;
+            self.init[i] = false;
         }
     }
 
@@ -187,9 +198,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     }
 
     /// returns a u64 signature. (requires a reallocation)
-    pub fn get_hsketch_u64(&self) -> Vec<u64> {
-        let usketch : Vec<u64> = self.values.iter().map(|t| t.unwrap()).collect();
-        return usketch;
+    pub fn get_hsketch_u64(&self) -> &Vec<u64> {
+        return &self.values;
     }
 
     
@@ -200,7 +210,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let m = self.hsketch.len();
         let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
         for d in to_sketch {
-            // hash! even if with NoHashHasher. In this case T must be u64 or u32
+            // hash! even if with NoHashHasher. In this case D must be u64 or u32
             let mut hasher = self.b_hasher.build_hasher();
             d.hash(&mut hasher);
             let hval1 : u64 = hasher.finish();
@@ -209,10 +219,11 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
             if r <= self.hsketch[k] {
                 self.hsketch[k] = r;
-                self.values[k] = Some(hval1);
+                self.values[k] = hval1;
+                self.init[k] = true;
             }
         }
-        let mut nb_empty : usize = self.values.iter().map(|x| if x.is_none() { 1} else {0}).sum();
+        let mut nb_empty : usize = self.init.iter().map(|x| if *x { 0 } else {1}).sum();
         log::debug!("fastdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, nb_empty);
         if nb_empty == 0 {
             return Ok(());
@@ -221,12 +232,13 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let mut pass : u64 = 1;
         while nb_empty > 0 {
             for k in 0..m { 
-                if self.values[k].is_some() {
+                if self.init[k] {
                     let mut rng2 = WyRng::seed_from_u64((k as u64 +1) * m as u64 + pass + 253713);
                     let j: usize = Uniform::<usize>::new(0, m).sample(&mut rng2);
-                    if self.values[j].is_none() {
+                    if self.init[j] == false {
                         self.values[j] = self.values[k];
                         self.hsketch[j] = self.hsketch[k];
+                        self.init[j] = true;
                         nb_empty = nb_empty - 1;                       
                     }
                 }
@@ -235,7 +247,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             log::debug!("end of pass {}, nb empty : {}", pass, nb_empty);      
         }
         //
-        let nb_empty : usize = self.values.iter().map(|x| if x.is_none() { 1} else {0}).sum();
+        let nb_empty : usize = self.init.iter().map(|x| if *x { 0 } else {1}).sum();
         assert_eq!(nb_empty, 0);
         //
         return Ok(());
@@ -377,7 +389,7 @@ mod tests {
             return Err(());
         }
         let ska = sminhash.get_hsketch().clone();
-        let ska_u64 = sminhash.get_hsketch_u64();
+        let ska_u64 = sminhash.get_hsketch_u64().clone();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -416,7 +428,7 @@ mod tests {
             return Err(());
         }
         let ska = sminhash.get_hsketch().clone();
-        let ska_u64 = sminhash.get_hsketch_u64();
+        let ska_u64 = sminhash.get_hsketch_u64().clone();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
