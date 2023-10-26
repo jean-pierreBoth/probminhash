@@ -9,9 +9,10 @@
 //! - On densification for MinWise Hashing.  
 //! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 //! 
+//! For both implementation the sketch can u64, u32 or F:Float
 
 
-
+use std::io::Cursor;
 
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher, Hash};
 use std::marker::PhantomData;
@@ -19,6 +20,9 @@ use rand::prelude::*;
 use rand::distributions::*;
 use rand_distr::uniform::SampleUniform;
 use rand_xoshiro::Xoshiro256PlusPlus;
+
+use murmur3::murmur3_32;
+
 use wyhash::WyRng;
 
 use num::Float;
@@ -84,6 +88,16 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         return &self.values;
     }
     
+    /// returns a u32 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
+    pub fn get_hsketch_u32(&self) -> Vec<u32> {
+        //
+        let value_32 = self.values.iter().map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap()).collect();
+        value_32
+    } // end of get_hsketch_u32
+    
+
+
+    /// sketch the slice
     pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
 
         let m = self.hsketch.len();
@@ -202,7 +216,15 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         return &self.values;
     }
 
-    
+    /// returns a u32 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
+    pub fn get_hsketch_u32(&self) -> Vec<u32> {
+        //
+        let value_32 = self.values.iter().map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap()).collect();
+        value_32
+    } // end of get_hsketch_u32
+
+
+
     /// Sketch a slice of data of type D.  
     /// implementation of sketching as in Algorithm1 in paragraph3 of [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
     pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
@@ -390,6 +412,7 @@ mod tests {
         }
         let ska = sminhash.get_hsketch().clone();
         let ska_u64 = sminhash.get_hsketch_u64().clone();
+        let ska_u32 = sminhash.get_hsketch_u32();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -398,6 +421,7 @@ mod tests {
         }
         let skb = sminhash.get_hsketch();
         let skb_u64 = sminhash.get_hsketch_u64();
+        let skb_u32 = sminhash.get_hsketch_u32();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
@@ -406,10 +430,17 @@ mod tests {
         //
         // check result with u64 signature
         //
-        let jac = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
+        let jac_u64 = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
-        let delta = (jac - jexact).abs()/sigma;
-        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        let delta = (jac_u64 - jexact).abs()/sigma;
+        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u64, jexact, sigma, delta);
+        //
+        // check result with u32 signature
+        //
+        let jac_u32 = get_jaccard_index_estimate(&ska_u32, &skb_u32).unwrap();        
+        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
+        let delta = (jac_u32 - jexact).abs()/sigma;
+        log::info!(" u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u32, jexact, sigma, delta);        
         //
         return Ok((jac, sigma));
     } // end of test_optdens
@@ -429,6 +460,7 @@ mod tests {
         }
         let ska = sminhash.get_hsketch().clone();
         let ska_u64 = sminhash.get_hsketch_u64().clone();
+        let ska_u32 = sminhash.get_hsketch_u32();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -437,6 +469,7 @@ mod tests {
         }
         let skb = sminhash.get_hsketch();
         let skb_u64 = sminhash.get_hsketch_u64();
+        let skb_u32 = sminhash.get_hsketch_u32();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
@@ -447,10 +480,17 @@ mod tests {
         //
         // check result with u64 signature
         //
-        let jac = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
+        let jac_u64 = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();        
         let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
-        let delta = (jac - jexact).abs()/sigma;
-        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        let delta = (jac_u64 - jexact).abs()/sigma;
+        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u64, jexact, sigma, delta);
+        //
+        // check result with u32 signature
+        //
+        let jac_u32 = get_jaccard_index_estimate(&ska_u32, &skb_u32).unwrap();        
+        let sigma = (jexact * (1.- jexact) / size as f64).sqrt();
+        let delta = (jac_u32 - jexact).abs()/sigma;
+        log::info!(" u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u32, jexact, sigma, delta); 
         //
         return Ok((jac, sigma));
     } // end of test_revoptdens
