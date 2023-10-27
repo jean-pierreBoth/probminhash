@@ -10,6 +10,7 @@
 //! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 //! 
 //! For both implementation the sketch can u64, u32 or F:Float
+//! Both algorithms can be used in streaming, see methods *sketch* as opposed to *sketch_slice*
 
 
 use std::io::Cursor;
@@ -38,8 +39,10 @@ pub struct OptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     hsketch:Vec<F>,
     /// stored data giving minima
     values:Vec<u64>,
-    ///
+    /// to keep track of initialized slot
     init : Vec<bool>,
+    ///
+    nb_empty : i64,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -56,12 +59,13 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let mut values = Vec::<u64>::with_capacity(size);
         let mut init  = Vec::<bool>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
+        let nb_empty = size as i64;
         for _i in 0..size {
             sketch_init.push(large);
             values.push(u64::MAX);
             init.push(false);
         }
-        OptDensMinHash{hsketch: sketch_init, values, init, b_hasher: build_hasher, t_marker : PhantomData,}
+        OptDensMinHash{hsketch: sketch_init, values, init, nb_empty, b_hasher: build_hasher, t_marker : PhantomData,}
     } // end of new
 
 
@@ -76,20 +80,42 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             self.values[i] = u64::MAX;
             self.init[i] = false;
         }
+        self.nb_empty = size as i64;
+    } // end of reinit
+
+
+    #[allow(unused)]
+    fn get_nb_empty(&self) -> i64 {
+        self.nb_empty
     }
 
-    /// returns a reference to computed sketches of type F:Float
+
+    /// returns a reference to computed sketches of type F:Float.
     pub fn get_hsketch(&self) -> &Vec<F> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
         return &self.hsketch;
-    }
+    } // end of get_hsketch
+
+
 
     /// returns a u64 signature.
-    pub fn get_hsketch_u64(&self) -> &Vec<u64> {
-        return &self.values;
+    pub fn get_hsketch_u64(&self) -> Vec<u64> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        return self.values.clone();
     }
     
     /// returns a u32 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
     pub fn get_hsketch_u32(&self) -> Vec<u32> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
         //
         let value_32 = self.values.iter().map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap()).collect();
         value_32
@@ -100,28 +126,64 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// sketch the slice
     pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
 
+        let m: usize = self.hsketch.len();
+        for d in to_sketch {
+            self.sketch(d);
+        }
+        log::debug!("optdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
+        //
+        if self.nb_empty > 0 {
+        // now we run densification if necessary
+            let res = self.densify();
+            assert!(res.is_ok());
+        }
+        //
+        return Ok(());
+    } // end of sketch_slice
+
+
+
+    /// sketch an item. This provides for computing sketches incrementally.   
+    /// **In this case the function [end_sketch](OptDensMinHash::end_sketch) must be called before calling methods get_hsketch!!**
+    pub fn sketch(&mut self, to_sketch : &D)  {
         let m = self.hsketch.len();
         let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
-        for d in to_sketch {
-            // hash! even if with NoHashHasher. In this case T must be u64 or u32
-            let mut hasher = self.b_hasher.build_hasher();
-            d.hash(&mut hasher);
-            let hval1 : u64 = hasher.finish();
-            let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
-            let r:F = unit_range.sample(&mut rand_generator);
-            let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
-            if r <= self.hsketch[k] {
-                self.hsketch[k] = r;
-                self.values[k] = hval1;
+        // hash! even if with NoHashHasher. In this case T must be u64 or u32
+        let mut hasher = self.b_hasher.build_hasher();
+        to_sketch.hash(&mut hasher);
+        let hval1 : u64 = hasher.finish();
+        let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
+        let r:F = unit_range.sample(&mut rand_generator);
+        let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
+        if r <= self.hsketch[k] {
+            self.hsketch[k] = r;
+            self.values[k] = hval1;
+            if self.init[k] == false {
                 self.init[k] = true;
+                self.nb_empty -= 1;
             }
         }
-        let nb_empty : usize = self.init.iter().map(|x| if *x  { 0 } else {1}).sum();
-        log::debug!("optdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, nb_empty);
-        if nb_empty == 0 {
-            return Ok(());
+    } // end of sketch
+
+
+    /// This method (densification) must be called before get_hsketch, get_hsketch_u32 or get_hsketch_u64
+    /// if the sketching of data was done step by step with iteration through [sketch()](OptDensMinHash::sketch) method.
+    /// If sketching was done by method [sketch_slice](OptDensMinHash::sketch_slice) this is done internally
+    pub fn end_sketch(&mut self) {
+        if self.nb_empty == 0 {
+            return;
         }
+        let res = self.densify();
+        assert!(res.is_ok());
+    }
+
+    // This method must be called before get_hsketch, get_hsketch_u32 or get_hsketch_u64
+    // if the sketching of data was done step by step with iteration through sketch() method.
+    // If sketching was done by (sketch_slice)[sketch_slice] this is done internally
+    fn densify(&mut self) -> Result<(),()> {
+
         // now we run densification
+        let m: usize = self.hsketch.len();
         let mut nbpass = 1u64;
         let inrange = Uniform::<usize>::new(0, m);
         for k in 0..m { 
@@ -135,6 +197,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
                         self.values[k] = self.values[j];
                         self.hsketch[k] = self.hsketch[j];
                         self.init[k] = true;
+                        self.nb_empty -= 1;
                         break;                       
                     }
                     nbpass += 1;
@@ -142,12 +205,11 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             }   
         }
         //
-        let nb_empty : usize = self.init.iter().map(|x| if *x { 0} else {1}).sum();
-        log::debug!("end of pass {}, nb empty : {}", nbpass, nb_empty);      
-        assert_eq!(nb_empty, 0);
+        log::debug!("end of pass {}, nb empty : {}", nbpass, self.nb_empty);      
+        assert_eq!(self.nb_empty, 0);
         //
-        return Ok(());
-    } // end of sketch_slice
+        Ok(())
+    } // end of densify
 
 
 } // end of impl OptDensMinHash
@@ -171,6 +233,8 @@ pub struct RevOptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     values:Vec<u64>,
     /// initialized status
     init : Vec<bool>,
+    ///
+    nb_empty : i64,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
     /// just to mark the type we sketch
@@ -186,12 +250,13 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         let mut values: Vec<u64> = Vec::<u64>::with_capacity(size);
         let mut init: Vec<bool> = Vec::<bool>::with_capacity(size);
         let large:F = F::from(u32::MAX).unwrap();  // is OK even for f32
+        let nb_empty = size as i64;
         for _i in 0..size {
             sketch_init.push(large);
             values.push(u64::MAX);
             init.push(false);
         }
-        RevOptDensMinHash{hsketch: sketch_init, values, init, b_hasher: build_hasher, t_marker : PhantomData,}
+        RevOptDensMinHash{hsketch: sketch_init, values, init, nb_empty, b_hasher: build_hasher, t_marker : PhantomData,}
     } // end of new
 
     /// Reinitialize minhasher, keeping size of sketches.  
@@ -204,24 +269,60 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             self.values[i] = u64::MAX;
             self.init[i] = false;
         }
+        self.nb_empty = size as i64;
     }
 
     /// returns a reference to computed sketches of type F:Float
     pub fn get_hsketch(&self) -> &Vec<F> {
+        if self.nb_empty > 0 {
+            log::error!("RevOptDensMinHash: end_sketch should have been called");
+            std::panic!("RevOptDensMinHash: end_sketch should have been called")
+        }
         return &self.hsketch;
     }
 
     /// returns a u64 signature. (requires a reallocation)
-    pub fn get_hsketch_u64(&self) -> &Vec<u64> {
-        return &self.values;
+    pub fn get_hsketch_u64(&self) -> Vec<u64> {
+        if self.nb_empty > 0 {
+            log::error!("RevOptDensMinHash: end_sketch should have been called");
+            std::panic!("RevOptDensMinHash: end_sketch should have been called")
+        }
+        return self.values.clone();
     }
 
     /// returns a u32 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
     pub fn get_hsketch_u32(&self) -> Vec<u32> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
         //
         let value_32 = self.values.iter().map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap()).collect();
         value_32
     } // end of get_hsketch_u32
+
+ 
+    /// sketch an item. This provides for computing sketches incrementally.   
+    /// **In this case the function [end_sketch()](RevOptDensMinHash::end_sketch) must be called before calling methods get_hsketch!!**
+    pub fn sketch(&mut self, d : &D) {
+        //
+        let m: usize = self.hsketch.len();
+        let mut hasher = self.b_hasher.build_hasher();
+        d.hash(&mut hasher);
+        let hval1 : u64 = hasher.finish();
+        let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
+        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
+        let r:F = unit_range.sample(&mut rand_generator);
+        let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
+        if r <= self.hsketch[k] {
+            self.hsketch[k] = r;
+            self.values[k] = hval1;
+            if self.init[k] == false {
+                self.init[k] = true;
+                self.nb_empty -= 1;
+            }
+        }      
+    } // end of fn sketch
 
 
 
@@ -229,30 +330,32 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// implementation of sketching as in Algorithm1 in paragraph3 of [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
     pub fn sketch_slice(&mut self, to_sketch : &[D]) -> Result <(),()> {
 
-        let m = self.hsketch.len();
-        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
+        let m: usize = self.hsketch.len();
         for d in to_sketch {
-            // hash! even if with NoHashHasher. In this case D must be u64 or u32
-            let mut hasher = self.b_hasher.build_hasher();
-            d.hash(&mut hasher);
-            let hval1 : u64 = hasher.finish();
-            let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
-            let r:F = unit_range.sample(&mut rand_generator);
-            let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
-            if r <= self.hsketch[k] {
-                self.hsketch[k] = r;
-                self.values[k] = hval1;
-                self.init[k] = true;
-            }
+            self.sketch(d);
         }
-        let mut nb_empty : usize = self.init.iter().map(|x| if *x { 0 } else {1}).sum();
-        log::debug!("fastdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, nb_empty);
-        if nb_empty == 0 {
-            return Ok(());
+        //
+        if self.nb_empty > 0 {
+            // now we run densification if necessary
+            let res = self.densify();
+            assert!(res.is_ok());
         }
+        log::debug!("fastdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
+        //    
+        return Ok(());
+    } // end of sketch_slice
+
+
+
+    /// This method must be called before get_hsketch, get_hsketch_u32 or get_hsketch_u64
+    /// if the sketching of data was done step by step with iteration through (sketch)[sketch] method.
+    /// If sketching was done by (sketch_slice)[sketch_slice] this is done internally
+    fn densify(&mut self) -> Result<(),()> {
+
         // now we run densification
+        let m: usize = self.hsketch.len();
         let mut pass : u64 = 1;
-        while nb_empty > 0 {
+        while self.nb_empty > 0 {
             for k in 0..m { 
                 if self.init[k] {
                     let mut rng2 = WyRng::seed_from_u64((k as u64 +1) * m as u64 + pass + 253713);
@@ -261,22 +364,31 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
                         self.values[j] = self.values[k];
                         self.hsketch[j] = self.hsketch[k];
                         self.init[j] = true;
-                        nb_empty = nb_empty - 1;                       
+                        self.nb_empty = self.nb_empty - 1;                       
                     }
                 }
             }   
             pass += 1;
-            log::debug!("end of pass {}, nb empty : {}", pass, nb_empty);      
+            log::debug!("end of pass {}, nb empty : {}", pass, self.nb_empty);      
         }
         //
-        let nb_empty : usize = self.init.iter().map(|x| if *x { 0 } else {1}).sum();
-        assert_eq!(nb_empty, 0);
+        log::debug!("end of pass {}, nb empty : {}", pass, self.nb_empty);      
+        assert_eq!(self.nb_empty, 0);
         //
-        return Ok(());
-    } // end of sketch_slice
+        Ok(())
+    } // end of densify
 
-
-
+    /// This method (densification) must be called before get_hsketch, get_hsketch_u32 or get_hsketch_u64
+    /// if the sketching of data was done step by step with iteration through  [sketch()](RevOptDensMinHash::sketch) method.  
+    /// If sketching was done by [sketch()](RevOptDensMinHash::sketch_slice) this is done internally
+    pub fn end_sketch(&mut self) {
+        if self.nb_empty == 0 {
+            return;
+        }
+        let res = self.densify();
+        assert!(res.is_ok());
+    }
+    
 } // end of impl RevOptDensMinHash
 
 //===================================================================================================
