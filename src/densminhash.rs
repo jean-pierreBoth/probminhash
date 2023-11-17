@@ -9,8 +9,11 @@
 //! - On densification for MinWise Hashing.  
 //! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 //! 
-//! For both implementation the sketch can u64, u32 or F:Float
-//! Both algorithms can be used in streaming, see methods *sketch* as opposed to *sketch_slice*
+//! For both implementation the sketch is Vec on following possible types: u64, u32 or F:Float.
+//! Both algorithms can be used in streaming, see methods [sketch](OptDensMinHash::sketch()) as opposed to method
+//! [sketch_slice](OptDensMinHash::sketch_slice()) (Idem for RevOptDensMinHash)
+//! 
+//! **Note : When used in streaming with method [sketch](OptDensMinHash::sketch()) note the need to call [end_sketch](OptDensMinHash::end_sketch())**
 
 
 use std::io::Cursor;
@@ -30,10 +33,9 @@ use num::Float;
 
 
 /// Optimal Densification for Fast and Accurate Minwise Hashing.  
-/// Provides a sketch with values Vec\<F\> with F:Float or Vec\<u64\> depending on the need.
 /// 
 /// For usual cases where the data size to sketch is larger or of size of same size as the sketch size this algorithm is optimal.
-/// In case of sketch size really larger than data to sketch, consider using RevOptDensMinHash
+/// In case of sketch size really larger than data to sketch, consider using [RevOptDensMinHash]
 pub struct OptDensMinHash<F: Float, D: Hash, H: Hasher+Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch:Vec<F>,
@@ -219,7 +221,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
 
 // ==============================================================================
 
-/// On densification for MinWise Hashing
+/// On densification for MinWise Hashing.  
 /// Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha
 /// [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 /// 
