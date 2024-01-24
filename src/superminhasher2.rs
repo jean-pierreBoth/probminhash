@@ -26,9 +26,7 @@ use num::{Integer, ToPrimitive, FromPrimitive, Bounded, Unsigned};
 
 use crate::fyshuffle::*;
 
-#[allow(unused_imports)]
-use crate::invhash;
-
+use crate::invhash::*;
 
 
 
@@ -299,7 +297,7 @@ mod tests {
     use super::*;
     use fnv::FnvHasher;
     use twox_hash::XxHash32;
-
+    use crate::invhash;
     #[allow(dead_code)]
     fn log_init_test() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -319,11 +317,14 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..2000).collect();
-        let inter = 100;
-        let jexact = inter as f32 / 2000.;
-        let size = 100;
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 5000;
+        let vbmax = 1.6 * vamax as f64;
+        let vb : Vec<usize> = (vbmin..vbmax as usize).collect();
+        let inter = vamax as usize - vbmin;
+        let jexact = inter as f32 / vbmax as f32;
+        let size = 30000;
         //
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : SuperMinHash2<u64, usize, FnvHasher>= SuperMinHash2::new(size, bh);
@@ -346,7 +347,7 @@ mod tests {
         let sigma = (jac * (1. - jac) / size as f32).sqrt();
         println!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3} ", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && jac < jexact + 3. * sigma);
+        assert!( jac > 0. && jac < jexact + 3. * sigma as f32);
     } // end of test_range_intersection_fnv_f64
 
 
@@ -357,13 +358,16 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<u64> = (0..1000).collect();
-        let vb : Vec<u64> = (900..2000).collect();
+        let vamax = 300000;
+        let va : Vec<u64> = (0..vamax).collect();
+        let vbmin = 290000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<u64> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f32 / vbmax as f32;
+        let size = 100000;
         //
-        let inter = 100;
-        let jexact = inter as f32 / 2000.;
-        let size = 70000;
-        //
+        println!("sketching via superminhash2");
         let bh = BuildHasherDefault::<XxHash32>::default();
         let mut sminhash : SuperMinHash2<u32, u64, XxHash32>= SuperMinHash2::new(size, bh);
         // now compute sketches

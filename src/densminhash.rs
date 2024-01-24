@@ -57,6 +57,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// allocate a struct to do .
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
     pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> OptDensMinHash<F, D, H> {
+        log::info!("\n allocating-sketcher \n");
         let mut sketch_init = Vec::<F>::with_capacity(size);
         let mut values = Vec::<u64>::with_capacity(size);
         let mut init  = Vec::<bool>::with_capacity(size);
@@ -132,6 +133,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
         for d in to_sketch {
             self.sketch(d);
         }
+        log::info!("optdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
+
         log::debug!("optdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
         //
         if self.nb_empty > 0 {
@@ -207,6 +210,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             }   
         }
         //
+        log::info!("end of pass {}, nb empty : {}", nbpass, self.nb_empty);  
         log::debug!("end of pass {}, nb empty : {}", nbpass, self.nb_empty);      
         assert_eq!(self.nb_empty, 0);
         //
@@ -248,6 +252,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
     /// allocate a struct to do superminhash.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
     pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> RevOptDensMinHash<F, D, H> {
+        log::info!("\n allocating-sketcher \n");
         let mut sketch_init = Vec::<F>::with_capacity(size);
         let mut values: Vec<u64> = Vec::<u64>::with_capacity(size);
         let mut init: Vec<bool> = Vec::<bool>::with_capacity(size);
@@ -342,6 +347,8 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             let res = self.densify();
             assert!(res.is_ok());
         }
+        log::info!("fastdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
+
         log::debug!("fastdensminhash::sketch_slice sketch size : {:?},  nb empy slots : {:?}", m, self.nb_empty);
         //    
         return Ok(());
@@ -374,6 +381,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, D:Hash + Copy,  H : Hasher+Def
             log::debug!("end of pass {}, nb empty : {}", pass, self.nb_empty);      
         }
         //
+        log::info!("end of pass {}, nb empty : {}", pass, self.nb_empty);  
         log::debug!("end of pass {}, nb empty : {}", pass, self.nb_empty);      
         assert_eq!(self.nb_empty, 0);
         //
@@ -449,12 +457,12 @@ mod tests {
         //
         let vamax = 300000;
         let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 50000;
-        let vbmax = 2 * vamax;
-        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let vbmin = 290000;
+        let vbmax = 2.0 * vamax as f64;
+        let vb : Vec<usize> = (vbmin..vbmax as usize).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;
+        let size = 90000;
         //
         let _res = test_optdens(&va, &vb, jexact, size);
     } // end of test_optdens_fewbins_fnv_f64
@@ -466,14 +474,14 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let vamax = 300000;
+        let vamax = 3000000;
         let va : Vec<usize> = (0..vamax).collect();
-        let vbmin = 50000;
+        let vbmin = 2900000;
         let vbmax = 2 * vamax;
         let vb : Vec<usize> = (vbmin..vbmax).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;
+        let size = 100000;
         //
         let res = test_revoptdens(&va, &vb, jexact, size).unwrap();
         assert!( res.0 > 0. && (res.0 - jexact).abs() < 3. * res.1);

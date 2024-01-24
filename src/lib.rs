@@ -14,7 +14,7 @@ pub mod probminhasher;
 pub mod superminhasher;
 pub mod setsketcher;
 pub mod densminhash;
-
+pub mod minhash;
 
 pub mod exp01;
 pub mod fyshuffle;
@@ -25,6 +25,7 @@ pub mod superminhasher2;
 
 pub mod invhash;
 pub mod nohasher;
+pub mod hashed;
 
 // hashing stuff
 

@@ -114,7 +114,7 @@ impl <F: Float + SampleUniform + std::fmt::Debug, T:Hash ,  H : Hasher+Default> 
     /// allocate a struct to do superminhash.
     /// size is size of sketch. build_hasher is the build hasher for the type of Hasher we want.
     pub fn new(size:usize, build_hasher: BuildHasherDefault<H>) -> SuperMinHash<F, T, H> {
-        //
+        log::info!("\n allocating-sketcher \n");
         let mut sketch_init = Vec::<F>::with_capacity(size);
         let mut q_init = Vec::<i64>::with_capacity(size);
         let mut p_init = Vec::<usize>::with_capacity(size);
@@ -358,12 +358,15 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..2000).collect();
-        let inter = 100;  // intersection size
-        let jexact = inter as f32 / 2000.;
-        let size = 70;
-        //
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 290000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f64 / vbmax as f64;
+        let size = 100000;
+        println!("sketching via superminhash1");
         let bh = BuildHasherDefault::<FnvHasher>::default();
         let mut sminhash : SuperMinHash<f32, usize, FnvHasher>= SuperMinHash::new(size, bh);
         // now compute sketches
@@ -382,10 +385,10 @@ mod tests {
         let skb = sminhash.get_hsketch();
         //
         let jac = compute_superminhash_jaccard(&ska, &skb).unwrap();
-        let sigma = (jexact * (1. - jexact) / size as f32).sqrt();
+        let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} sigma : {:.3e}", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
-        assert!( jac > 0. && (jac as f32) < jexact + 3. * sigma);
+        assert!( jac > 0. && (jac as f64) < jexact + 3. * sigma);
     } // end of test_range_intersection_fnv_f32
 
 

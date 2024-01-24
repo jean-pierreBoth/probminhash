@@ -67,7 +67,7 @@ pub struct SetSketchParams {
 
 impl Default for SetSketchParams {
     fn default() -> Self {
-        SetSketchParams{b : 1.001, m : 4096, a : 20., q : 2_u64.pow(16) - 2}
+        SetSketchParams{b : 1.001, m : 6144, a : 20., q : 2_u64.pow(16) - 2}
     }
 } // end of SetSketchParams
 
@@ -680,11 +680,14 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let va : Vec<usize> = (0..1000).collect();
-        let vb : Vec<usize> = (900..2000).collect();
-        let inter = 100;  // intersection size
-        let jexact = inter as f32 / 2000 as f32;
-        let nb_sketch = 2000;
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 290000;
+        let vbmax = 2 * vamax;
+        let vb : Vec<usize> = (vbmin..vbmax).collect();
+        let inter = vamax - vbmin;
+        let jexact = inter as f32 / vbmax as f32;
+        let nb_sketch = 100000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -711,7 +714,7 @@ mod tests {
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        log::info!(" jaccard estimate {:.5e}, j exact : {:.5e} , sigma : {:.5e}", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
     }  // end of test_range_intersection_fnv_f32
@@ -726,16 +729,14 @@ mod tests {
         // we construct 2 ranges [a..b] [c..d], with a<b, b < d, c<d sketch them and compute jaccard.
         // we should get something like max(b,c) - min(b,c)/ (b-a+d-c)
         //
-        let vb_max = 20000;
-        let vb_min = 10000;
-        //
-        let va_min = 500;
-        let va_max = 10100;
-        //
-        let va : Vec<usize> = (va_min..va_max).collect();
-        let vb : Vec<usize> = (vb_min..vb_max).collect();
-        let jexact = (va_max - vb_min) as f32 / (vb_max - va_min) as f32;
-        let nb_sketch = 4000;
+        let vamax = 300000;
+        let va : Vec<usize> = (0..vamax).collect();
+        let vbmin = 5000;
+        let vbmax = 1.6 * vamax as f64;
+        let vb : Vec<usize> = (vbmin..vbmax as usize).collect();
+        let inter = vamax as usize - vbmin;
+        let jexact = inter as f32 / vbmax as f32;
+        let nb_sketch = 30000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -750,7 +751,7 @@ mod tests {
         log::info!("lowest sketch : {}", low_sketch);
         assert!(low_sketch > 0);
         let cardinal = sethasher.get_cardinal_stats();
-        log::info!("cardinal of set a : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
+        log::info!("cardinal of set a : {:.5e} relative stddev : {:.5e}", cardinal.0, cardinal.1);
 
         let ska = sethasher.get_signature().clone();
         //
@@ -763,14 +764,14 @@ mod tests {
         }
         let skb = sethasher.get_signature();
         let cardinal = sethasher.get_cardinal_stats();
-        log::info!("cardinal of set b : {:.3e} relative stddev : {:.3e}", cardinal.0, cardinal.1);
+        log::info!("cardinal of set b : {:.5e} relative stddev : {:.5e}", cardinal.0, cardinal.1);
         //
         log::debug!("ska = {:?}",ska);
         log::debug!("skb = {:?}",skb);
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
-        log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
+        log::info!(" jaccard estimate {:.5e}, j exact : {:.5e} , sigma : {:.5e}", jac, jexact, sigma);
         // we have 10% common values and we sample a sketch of size 50 on 2000 values , we should see intersection
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
     }  // end of test_range_intersection_fnv_f32
@@ -859,13 +860,14 @@ mod tests {
         //
         log_init_test();
         // 
-        let vbmax = 2000;
-        let vbmin = 995;
-        let vamax = 1000;
-        assert!(vamax > vbmin);
+        let vamax = 300000;
         let va : Vec<usize> = (0..vamax).collect();
-        let vb : Vec<usize> = (vbmin..vbmax).collect();
-        let nb_sketch = 6000;
+        let vbmin = 5000;
+        let vbmax = 1.6 * vamax as f64;
+        let vb : Vec<usize> = (vbmin..vbmax as usize).collect();
+        let inter = vamax as usize - vbmin;
+        let jexact = inter as f32 / vbmax as f32;
+        let nb_sketch = 30000;
         //
         let mut params = SetSketchParams::default();
         params.set_m(nb_sketch);
@@ -887,7 +889,6 @@ mod tests {
         // now we compute intersection between sethasher_a and sethasher_b
         log::info!("test_mle : vbmax : {}, nbsketch : {}", vbmax, nb_sketch);
         let jac = get_jaccard_index_estimate(&sethasher_a.get_signature(), &sethasher_b.get_signature()).unwrap();
-        let jexact = (vamax - vbmin) as f32 / vbmax as f32;
         let sigma = (jexact * (1. - jexact) / params.get_m() as f32).sqrt();
         log::info!(" jaccard estimate {:.3e}, j exact : {:.3e} , sigma : {:.3e}", jac, jexact, sigma);
         assert!( jac > 0. && (jac as f32) < jexact + 3.* sigma);
