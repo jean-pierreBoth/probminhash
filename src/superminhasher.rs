@@ -20,6 +20,7 @@ use std::cmp;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 
+use anyhow::anyhow;
 use num::Float;
 
 #[allow(unused_imports)]
@@ -98,7 +99,7 @@ pub struct SuperMinHash<F: Float, T: Hash, H: Hasher + Default> {
     b: Vec<i64>,
     /// rank of item hashed . Necessary for the streaming case if sketch_slice is called several times iteratively
     item_rank: usize,
-    ///
+    //
     a_upper: usize,
     /// the Hasher to use if data arrive unhashed. Anyway the data type we sketch must satisfy the trait Hash
     b_hasher: BuildHasherDefault<H>,
@@ -162,13 +163,14 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
 
     /// returns a reference to computed sketches
     pub fn get_hsketch(&self) -> &Vec<F> {
-        return &self.hsketch;
+        &self.hsketch
     }
 
     /// returns an estimator of jaccard index between the sketch in this structure and the sketch passed as arg
-    pub fn get_jaccard_index_estimate(&self, other_sketch: &Vec<F>) -> Result<f64, ()> {
+    #[allow(clippy::needless_range_loop)]
+    pub fn get_jaccard_index_estimate(&self, other_sketch: &[F]) -> anyhow::Result<f64> {
         if other_sketch.len() != self.hsketch.len() {
-            return Err(());
+            return Err(anyhow!("unequal sketch lengths"));
         }
         let mut count: usize = 0;
         for i in 0..self.hsketch.len() {
@@ -177,19 +179,17 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
                 count += 1;
             }
         }
-        return Ok(count as f64 / other_sketch.len() as f64);
+        Ok(count as f64 / other_sketch.len() as f64)
     } // end of get_jaccard_index_estimate
 
     /// Insert an item in the set to sketch.  
     /// It can be used in streaming to update current sketch
-    pub fn sketch(&mut self, to_sketch: &T) -> Result<(), ()> {
+    pub fn sketch(&mut self, to_sketch: &T) -> anyhow::Result<()> {
         let m = self.hsketch.len();
         let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
         //
         // hash! even if with NoHashHasher. In this case T must be u64 or u32
-        let mut hasher = self.b_hasher.build_hasher();
-        to_sketch.hash(&mut hasher);
-        let hval1: u64 = hasher.finish();
+        let hval1: u64 = self.b_hasher.hash_one(&to_sketch);
         // Then initialize random numbers generators with seedxor,
         // we have one random generator for each element to sketch
         // In probminhash we imposed T to verifiy Into<usize>. We have to be coherent..
@@ -221,10 +221,10 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
                 self.hsketch[self.p[j]] = rpj;
                 if j < j_2 {
                     // we can decrease counter of upper parts of b and update upper
-                    self.b[j_2] = self.b[j_2] - 1;
+                    self.b[j_2] -= 1;
                     self.b[j] += 1;
                     while self.b[self.a_upper] == 0 {
-                        self.a_upper = self.a_upper - 1;
+                        self.a_upper -= 1;
                     } // end if j < j_2
                     log::trace!(
                         "after : j {} k {} self.b[j] {}, upper : {}",
@@ -246,24 +246,23 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
         } // end of while on j <= upper
         self.item_rank += 1;
         //
-        return Ok(());
+        Ok(())
     } // end of sketch
 
     /// Arg to_sketch is an array ( a slice) of values to hash.
     /// It can be used in streaming to update current sketch
-    pub fn sketch_slice(&mut self, to_sketch: &[T]) -> Result<(), ()> {
-        let nb_elem = to_sketch.len();
+    pub fn sketch_slice(&mut self, to_sketch: &[T]) -> anyhow::Result<()> {
         //
-        if nb_elem == 0 {
+        if to_sketch.is_empty() {
             println!(" empty arg");
-            return Err(());
+            return Err(anyhow!("empty sketch"));
         }
         //
-        for i in 0..nb_elem {
-            self.sketch(&to_sketch[i]).unwrap();
+        for val in to_sketch {
+            self.sketch(val).unwrap();
         }
         //
-        return Ok(());
+        Ok(())
     } // end of sketch_batch
 } // end of impl SuperMinHash
 
@@ -276,11 +275,11 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
 /// Note that if *jp* is the returned value of this function,  
 /// the distance between siga and sigb, associated to the jaccard index is *1.- jp*
 pub fn compute_superminhash_jaccard<F: Float + std::fmt::Debug>(
-    hsketch: &Vec<F>,
-    other_sketch: &Vec<F>,
-) -> Result<F, ()> {
+    hsketch: &[F],
+    other_sketch: &[F],
+) -> anyhow::Result<F> {
     if hsketch.len() != other_sketch.len() {
-        return Err(());
+        return Err(anyhow!("inequal sketch lenghts"));
     }
     let mut count: usize = 0;
     for i in 0..hsketch.len() {
@@ -289,16 +288,16 @@ pub fn compute_superminhash_jaccard<F: Float + std::fmt::Debug>(
             count += 1;
         }
     }
-    return Ok(F::from(count).unwrap() / F::from(other_sketch.len()).unwrap());
+    Ok(F::from(count).unwrap() / F::from(other_sketch.len()).unwrap())
 } // end of get_jaccard_index_estimate
 
 /// just an alias for backward compatibility
 #[inline]
 pub fn get_jaccard_index_estimate<F: Float + std::fmt::Debug>(
-    hsketch: &Vec<F>,
-    other_sketch: &Vec<F>,
-) -> Result<F, ()> {
-    return compute_superminhash_jaccard::<F>(hsketch, other_sketch);
+    hsketch: &[F],
+    other_sketch: &[F],
+) -> anyhow::Result<F> {
+    compute_superminhash_jaccard::<F>(hsketch, other_sketch)
 }
 
 //===========================================================================================

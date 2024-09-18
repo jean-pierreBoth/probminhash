@@ -9,6 +9,9 @@
 //! Moreover the sketches produced are mergeable see function [merge](SetSketcher::merge).
 //!
 //! The cardinal of the set can be estimated with the basic (unoptimized) function [get_cardinal_stats](SetSketcher::get_cardinal_stats)
+//!
+
+#![allow(clippy::comparison_chain)]
 
 use serde::{Deserialize, Serialize};
 use serde_json::to_writer;
@@ -30,6 +33,8 @@ use rayon::prelude::*;
 use argmin::core::observers::{ObserverMode, SlogLogger};
 use argmin::core::{CostFunction, Executor};
 use argmin::solver::goldensectionsearch::GoldenSectionSearch;
+
+use anyhow::anyhow;
 
 use crate::fyshuffle::*;
 
@@ -82,27 +87,27 @@ impl SetSketchParams {
         SetSketchParams { b, m, a, q }
     }
 
-    ///
+    //
     pub fn get_a(&self) -> f64 {
         self.a
     }
 
-    ///
+    //
     pub fn get_b(&self) -> f64 {
         self.b
     }
 
-    ///
+    //
     pub fn get_q(&self) -> u64 {
         self.q
     }
 
-    ///
+    //
     pub fn get_m(&self) -> u64 {
         self.m
     }
 
-    ///
+    //
     pub fn set_m(&mut self, nb_sketch: usize) {
         self.m = nb_sketch as u64;
     }
@@ -127,7 +132,7 @@ impl SetSketchParams {
         //
         assert!(jac >= 1. || jinf <= jsup);
         //
-        return (jinf, jsup);
+        (jinf, jsup)
     }
 
     pub fn dump_json(&self, dirpath: &Path) -> Result<(), String> {
@@ -154,7 +159,7 @@ impl SetSketchParams {
         }
         //
         let mut writer = BufWriter::new(fileres.unwrap());
-        let _ = to_writer(&mut writer, &self).unwrap();
+        to_writer(&mut writer, &self).unwrap();
         //
         Ok(())
     } // end of dump_json
@@ -226,9 +231,9 @@ where
     fn default() -> SetSketcher<I, T, H> {
         let params = SetSketchParams::default();
         let m: usize = 4096;
-        let k_vec: Vec<I> = (0..m).into_iter().map(|_| I::zero()).collect();
+        let k_vec: Vec<I> = (0..m).map(|_| I::zero()).collect();
         let lnb = (params.get_b() - 1.).ln_1p(); // this is ln(b) for b near 1.
-        return SetSketcher::<I, T, H> {
+        SetSketcher::<I, T, H> {
             _b: params.get_b(),
             m: params.get_m(),
             a: params.get_a(),
@@ -241,11 +246,11 @@ where
             lnb,
             b_hasher: BuildHasherDefault::<H>::default(),
             t_marker: PhantomData,
-        };
+        }
     }
 }
 
-impl<'a, I, T, H> SetSketcher<I, T, H>
+impl<I, T, H> SetSketcher<I, T, H>
 where
     I: Integer + ToPrimitive + FromPrimitive + Bounded + Copy + Clone + std::fmt::Debug,
     T: Hash,
@@ -254,10 +259,10 @@ where
     /// allocate a new sketcher
     pub fn new(params: SetSketchParams, b_hasher: BuildHasherDefault<H>) -> Self {
         //
-        let k_vec: Vec<I> = (0..params.get_m()).into_iter().map(|_| I::zero()).collect();
+        let k_vec: Vec<I> = (0..params.get_m()).map(|_| I::zero()).collect();
         let lnb = (params.get_b() - 1.).ln_1p(); // this is ln(b) for b near 1.
                                                  //
-        return SetSketcher::<I, T, H> {
+        SetSketcher::<I, T, H> {
             _b: params.get_b(),
             m: params.get_m(),
             a: params.get_a(),
@@ -270,7 +275,7 @@ where
             lnb,
             b_hasher,
             t_marker: PhantomData,
-        };
+        }
     }
 
     /// return logarithm base of sketches
@@ -280,11 +285,9 @@ where
 
     // We implement algo sketch1 as we will use it for large number of data and so correlation are expected to be very low.
     /// take into account one more data
-    pub fn sketch(&mut self, to_sketch: &T) -> Result<(), ()> {
+    pub fn sketch(&mut self, to_sketch: &T) -> anyhow::Result<()> {
         //
-        let mut hasher = self.b_hasher.build_hasher();
-        to_sketch.hash(&mut hasher);
-        let hval1: u64 = hasher.finish();
+        let hval1: u64 = self.b_hasher.hash_one(&to_sketch);
         //
         let imax: u64 = I::max_value().to_u64().unwrap(); // max value of I as a u64
                                                           //
@@ -336,7 +339,7 @@ where
                 } else {
                     self.k_vec[i] = I::from_u64(k).unwrap();
                 }
-                self.nbmin = self.nbmin + 1;
+                self.nbmin += 1;
                 if self.nbmin % self.m == 0 {
                     let flow = self
                         .k_vec
@@ -358,7 +361,7 @@ where
             }
         }
         //
-        return Ok(());
+        Ok(())
     } // end of sketch
 
     /// returns the lowest value of sketch
@@ -366,30 +369,29 @@ where
     /// that the size of the set sketched is large compared to the number of sketch this
     /// has a very low probability.
     pub fn get_low_sketch(&self) -> i64 {
-        return self.lower_k.floor() as i64;
+        self.lower_k.floor() as i64
     }
 
     /// returns the number of time value sketcher overflowed the number of bits allocated
     /// should be less than number of values sketched / 100_000 if parameters are well chosen.
     pub fn get_nb_overflow(&self) -> u64 {
-        return self.nb_overflow;
+        self.nb_overflow
     }
 
     /// Arg to_sketch is an array ( a slice) of values to hash.
     /// It can be used in streaming to update current sketch
-    pub fn sketch_slice(&mut self, to_sketch: &[T]) -> Result<(), ()> {
-        let nb_elem = to_sketch.len();
+    pub fn sketch_slice(&mut self, to_sketch: &[T]) -> anyhow::Result<()> {
         //
-        if nb_elem == 0 {
+        if to_sketch.is_empty() {
             println!(" empty arg");
-            return Err(());
+            return Err(anyhow!("empty sketch"));
         }
         //
-        for i in 1..nb_elem {
-            self.sketch(&to_sketch[i]).unwrap();
+        for val in to_sketch {
+            self.sketch(val).unwrap();
         }
         //
-        return Ok(());
+        Ok(())
     } // end of sketch_slice
 
     /// The function returns a 2-uple with first field cardinal estimator and second field the **relative standard deviation**.  
@@ -399,19 +401,18 @@ where
         let sumbk = self.k_vec.iter().fold(0.0f64, |acc: f64, c| {
             acc + (-c.to_f64().unwrap() * (self._b - 1.).ln_1p()).exp()
         });
-        let cardinality: f64 =
-            self.m as f64 * (1. - 1. / self._b) / (self.a as f64 * self.lnb * sumbk);
+        let cardinality: f64 = self.m as f64 * (1. - 1. / self._b) / (self.a * self.lnb * sumbk);
         //
         let rel_std_dev = ((self._b + 1.) / (self._b - 1.) * self.lnb - 1.) / self.m as f64;
         let rel_std_dev = rel_std_dev.sqrt();
-        return (cardinality, rel_std_dev);
+        (cardinality, rel_std_dev)
     }
 
     // reset state
     pub fn reinit(&mut self) {
         //
         self.permut_generator.reset();
-        self.k_vec = (0..self.m).into_iter().map(|_| I::zero()).collect();
+        self.k_vec = (0..self.m).map(|_| I::zero()).collect();
         self.lower_k = 0.;
         self.nbmin = 0;
         self.nb_overflow = 0;
@@ -421,15 +422,15 @@ where
     /// We can thus get a sketch for a union and so estimate the cardinal of the union of 2 sets.  
     /// Self replaces its sketch by the union of itself and the other if the result is OK
     /// otherwise it return Err and is left unchanged
-    pub fn merge(&mut self, other: &SetSketcher<I, T, H>) -> Result<(), ()> {
+    pub fn merge(&mut self, other: &SetSketcher<I, T, H>) -> anyhow::Result<()> {
         // check parameters equality
         if self.m != other.m || self.q != other.q {
-            return Err(());
+            return Err(anyhow!("non mergeable : different sketching parameters"));
         }
         if (self._b - other._b).abs() / self._b >= f64::EPSILON
             || (self.a - other.a).abs() / self.a >= f64::EPSILON
         {
-            return Err(());
+            return Err(anyhow!("non mergeable : different sketching parameters"));
         }
         // takes max
         for i in 0..self.k_vec.len() {
@@ -443,7 +444,7 @@ where
 
     /// get signature sketch. Same as get_hsketch
     pub fn get_signature(&self) -> &Vec<I> {
-        return &self.k_vec;
+        &self.k_vec
     }
 
     // in fact I prefer get_signature
@@ -458,7 +459,7 @@ where
 /// computes minus likelyhood , to be minimized by Brent method.
 /// We use notations of Ertl paper
 #[derive(Copy, Clone, Debug)]
-pub(self) struct MleCost {
+struct MleCost {
     //
     dplus: f64,
     dless: f64,
@@ -494,7 +495,7 @@ impl MleCost {
         //
         assert!(!val.is_nan());
         //
-        return val;
+        val
     } // end of pb
 } // end of MleCost
 
@@ -511,7 +512,7 @@ impl CostFunction for MleCost {
             + self.dless * pbless.ln()
             + self.dequal * (1. - pbplus - pbless).ln();
         // return - likelyhood as we want to maximize
-        return Ok(-log_likelyhood);
+        Ok(-log_likelyhood)
     } // end of cost
 }
 
@@ -557,8 +558,7 @@ impl MleJaccard {
             .into_par_iter()
             .map(|c| (-(*c).to_f64().unwrap() * (self.b - 1.).ln_1p()).exp())
             .sum();
-        let cardinality: f64 =
-            self.m as f64 * (1. - 1. / self.b) / (self.a as f64 * self.lnb * sumbk);
+        let cardinality: f64 = self.m as f64 * (1. - 1. / self.b) / (self.a * self.lnb * sumbk);
         //
         cardinality
     } // end of get_cardinal_estimate
@@ -577,10 +577,8 @@ impl MleJaccard {
         let card1 = self.get_cardinal_estimate(sketch1);
         let card2 = self.get_cardinal_estimate(sketch2);
         log::info!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
-        let u: f64;
-        let v: f64;
-        u = card1 / (card1 + card2);
-        v = card2 / (card1 + card2);
+        let u = card1 / (card1 + card2);
+        let v = card2 / (card1 + card2);
         //
         let mut dplus: u32 = 0;
         let mut dless: u32 = 0;
@@ -665,7 +663,7 @@ impl MleJaccard {
         //
         let _j_b1 = self.get_mle_approx_b1(sketch1, sketch2).unwrap();
         //
-        return state.best_param;
+        state.best_param
     } // end of mle_jaccard
 
     fn get_mle_approx_b1<I>(&self, sketch1: &[I], sketch2: &[I]) -> Option<f64>
@@ -680,10 +678,8 @@ impl MleJaccard {
         let card1 = self.get_cardinal_estimate(sketch1);
         let card2 = self.get_cardinal_estimate(sketch2);
         log::info!("mle_jaccard card1 : {}, card2 : {}", card1, card2);
-        let u: f64;
-        let v: f64;
-        u = card1 / (card1 + card2);
-        v = card2 / (card1 + card2);
+        let u = card1 / (card1 + card2);
+        let v = card2 / (card1 + card2);
         //
         let mut dplus: u32 = 0;
         let mut dless: u32 = 0;
@@ -704,11 +700,11 @@ impl MleJaccard {
         aux = aux * aux;
         let mut j: f64 = u * u * (dless + dequal) + v * v * (dplus + dequal)
             - (aux + 4. * dless * dplus * (u * v) * (u * v)).sqrt();
-        j = j / (2. * u * v * self.m as f64);
+        j /= 2. * u * v * self.m as f64;
         //
         log::info!(" j mle approx for b -> 1 : {:?}", j);
         //
-        return Some(j);
+        Some(j)
     } // end of get_mle_approx_b1
 } // end of impl MleJaccard
 
