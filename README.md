@@ -46,9 +46,9 @@ We provide sketching (adapted to LSH with Jaccard distance) and a cardinality es
     Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 
 * Original MinHash (bottom-k MinHash)
-**On the resemblance and containment of documents** Broder et.al., 1997 [](https://ieeexplore.ieee.org/abstract/document/666900) or **Min-wise independent permutations** Broder et.al., 1998 [STOC](https://dl.acm.org/doi/pdf/10.1145/276698.276781).
+**On the resemblance and containment of documents** Broder 1997 [Proceedings-1997](https://ieeexplore.ieee.org/abstract/document/666900) or **Min-wise independent permutations** Broder et.al., 1998 [STOC](https://dl.acm.org/doi/pdf/10.1145/276698.276781).
 
-This algorithm use a bottom-k strategy to extract k minimum hashes, using only one hash function as used by Broder et.al., 1997. However, in a followup paper, Broder et.al., 1998, this strategy was abandoned because it is not locality sensitive hashing. We implemented it here for benchmark purposes. 
+This algorithm use a bottom-k strategy to extract k minimum hashes, using only one hash function as used by Broder 1997. However, in a followup paper, Broder et.al., 1998, this strategy was abandoned because it is not locality sensitive hashing. We implemented it here for benchmark purposes. 
 
 * ProbOrdMinHash2 is a locality-sensitive hashing for the edit distance implemented over ProbMinHash2 as in  Ertl's [probordminhash2](https://github.com/oertl/probminhash).  
 It is inspired by *Marcais.G et al. BioInformatics 2019*, see  [Marcais](https://academic.oup.com/bioinformatics/article/35/14/i127/5529166)
