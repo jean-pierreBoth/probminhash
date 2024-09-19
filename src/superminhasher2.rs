@@ -265,15 +265,14 @@ where
     /// Arg to_sketch is an array ( a slice) of values to hash.
     /// It can be used in streaming to update current sketch
     pub fn sketch_slice(&mut self, to_sketch: &[T]) -> Result<(), ()> {
-        let nb_elem = to_sketch.len();
         //
-        if nb_elem == 0 {
+        if to_sketch.is_empty() {
             println!(" empty arg");
             return Err(());
         }
         //
-        for i in 0..nb_elem {
-            self.sketch(&to_sketch[i]).unwrap();
+        for val in to_sketch {
+            self.sketch(val).unwrap();
         }
         //
         return Ok(());
