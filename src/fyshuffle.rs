@@ -2,7 +2,7 @@
 
 use log::trace;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 
 // Fisher Yates random permutation generation (sampling without replacement), with lazy generation
 /// of an array of size n
@@ -22,7 +22,7 @@ impl FYshuffle {
         let v: Vec<usize> = (0..m).collect();
         FYshuffle {
             m,
-            unif_01: Uniform::<f64>::new(0., 1.),
+            unif_01: Uniform::<f64>::new(0., 1.).unwrap(),
             v,
             lastidx: m,
         }

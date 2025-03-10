@@ -14,7 +14,7 @@
 
 use log::trace;
 
-use rand::distributions::*;
+use rand::distr::*;
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
@@ -220,7 +220,7 @@ where
         //
         let mut j: usize = 0;
         while j <= self.a_upper {
-            let r: usize = rand_generator.sample(Standard);
+            let r: usize = rand_generator.sample(StandardUniform);
             let k = self.permut_generator.next(&mut rand_generator);
             //
             log::trace!(
@@ -319,7 +319,6 @@ pub fn get_jaccard_index_estimate<F: PartialEq + num::Zero + std::fmt::Debug>(
 mod tests {
     use super::*;
     use fnv::FnvHasher;
-    use twox_hash::XxHash32;
 
     #[allow(dead_code)]
     fn log_init_test() {

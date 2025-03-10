@@ -30,9 +30,10 @@ use num::{Bounded, FromPrimitive, Integer, ToPrimitive};
 
 use rayon::prelude::*;
 
-use argmin::core::observers::{ObserverMode, SlogLogger};
+use argmin::core::observers::ObserverMode;
 use argmin::core::{CostFunction, Executor};
 use argmin::solver::goldensectionsearch::GoldenSectionSearch;
+use argmin_observer_slog::SlogLogger;
 
 use anyhow::anyhow;
 
@@ -716,7 +717,7 @@ mod tests {
     use super::*;
     use crate::jaccard::*;
     use fnv::FnvHasher;
-    use rand::distributions::Uniform;
+    use rand::distr::Uniform;
 
     #[allow(dead_code)]
     fn log_init_test() {
@@ -881,7 +882,7 @@ mod tests {
         params.set_m(nb_sketch);
         let mut sethasher: SetSketcher<u16, usize, FnvHasher> =
             SetSketcher::new(params, BuildHasherDefault::<FnvHasher>::default());
-        let unif = Uniform::<usize>::new(0, vamax);
+        let unif = Uniform::<usize>::new(0, vamax).unwrap();
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(45679 as u64);
 
         for _ in 0..nb_sketch {

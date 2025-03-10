@@ -12,7 +12,7 @@
 
 use log::trace;
 
-use rand::distributions::*;
+use rand::distr::*;
 use rand::prelude::*;
 use rand_distr::uniform::SampleUniform;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -186,7 +186,7 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
     /// It can be used in streaming to update current sketch
     pub fn sketch(&mut self, to_sketch: &T) -> anyhow::Result<()> {
         let m = self.hsketch.len();
-        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
+        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>()).unwrap();
         //
         // hash! even if with NoHashHasher. In this case T must be u64 or u32
         let hval1: u64 = self.b_hasher.hash_one(&to_sketch);
@@ -201,8 +201,10 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
         let irank = (self.item_rank) as i64;
         while j <= self.a_upper {
             let r: F = unit_range.sample(&mut rand_generator);
-            let k = Uniform::<usize>::new(j, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
-                                                                             //
+            let k = Uniform::<usize>::new(j, m)
+                .unwrap()
+                .sample(&mut rand_generator); // m beccause upper bound of range is excluded
+                                              //
             if self.q[j] != irank {
                 self.q[j] = irank;
                 self.p[j] = j;

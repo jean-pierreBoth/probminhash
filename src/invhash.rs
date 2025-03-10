@@ -94,14 +94,12 @@ pub fn int32_hash_inverse(hash: u32) -> u32 {
     val
 }
 
-extern crate rand;
-
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use log::*;
-    use rand::thread_rng;
+    use rand::rng;
     use rand::RngCore;
 
     #[allow(dead_code)]
@@ -117,7 +115,7 @@ mod tests {
         let mut hashed;
         let mut i_hashed;
         for i in 0..1000000 {
-            to_hash = rand::thread_rng().next_u64();
+            to_hash = rand::rng().next_u64();
             hashed = int64_hash(to_hash);
             i_hashed = int64_hash_inverse(hashed);
             trace!("i hash unhash = {} {}  {} ", i, to_hash, i_hashed);
@@ -133,7 +131,7 @@ mod tests {
         let mut hashed;
         let mut i_hashed;
         for i in 0..1000000 {
-            to_hash = thread_rng().next_u32();
+            to_hash = rng().next_u32();
             hashed = int32_hash(to_hash);
             i_hashed = int32_hash_inverse(hashed);
             trace!("i hash unhash = {} {}  {} ", i, to_hash, i_hashed);

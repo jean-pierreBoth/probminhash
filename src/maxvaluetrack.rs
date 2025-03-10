@@ -153,7 +153,7 @@ where
 #[cfg(test)]
 mod tests {
 
-    use rand::distributions::{Distribution, Uniform};
+    use rand::distr::{Distribution, Uniform};
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -171,8 +171,8 @@ mod tests {
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(45678 as u64);
 
         let nbhash = 10;
-        let unif_01 = Uniform::<f64>::new(0., 1.);
-        let unif_m = Uniform::<usize>::new(0, nbhash);
+        let unif_01 = Uniform::<f64>::new(0., 1.).unwrap();
+        let unif_0m = Uniform::<usize>::new(0, nbhash).unwrap();
 
         let mut tracker = MaxValueTracker::new(nbhash);
         //
@@ -180,7 +180,7 @@ mod tests {
         let loop_size = 500;
         //
         for _ in 0..loop_size {
-            let k = unif_m.sample(&mut rng);
+            let k = unif_0m.sample(&mut rng);
             assert!(k < nbhash);
             let xsi = unif_01.sample(&mut rng);
             vmax = vmax.max(xsi);

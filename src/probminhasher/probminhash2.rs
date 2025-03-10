@@ -8,7 +8,7 @@
 use log::trace;
 use std::fmt::Debug;
 
-use rand::distributions::Distribution;
+use rand::distr::Distribution;
 use rand::prelude::*;
 use rand_distr::Exp1;
 use rand_xoshiro::Xoshiro256PlusPlus;

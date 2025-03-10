@@ -408,7 +408,7 @@ mod tests {
         log_init_test();
         log::info!("in test_ordminhash2_random_data");
         //
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let data_size = 50000;
         let data = (0..data_size).map(|_| rng.next_u64()).collect::<Vec<u64>>();
 

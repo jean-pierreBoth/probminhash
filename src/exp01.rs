@@ -1,6 +1,6 @@
 //! sampling exponential law with restriction of domain in [0,1)
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand::prelude::*;
 
 /// Structure implemneting exponential sampling of parameter lambda with support restricted
@@ -29,7 +29,7 @@ impl ExpRestricted01 {
             c1,
             c2,
             c3,
-            unit_range: Uniform::<f64>::new(0., 1.),
+            unit_range: Uniform::<f64>::new(0., 1.).unwrap(),
         }
     }
 
@@ -75,7 +75,7 @@ impl Distribution<f64> for ExpRestricted01 {
 #[cfg(test)]
 mod tests {
 
-    use rand::distributions::Distribution;
+    use rand::distr::Distribution;
     use rand::prelude::*;
     use rand_xoshiro::Xoshiro256PlusPlus;
 

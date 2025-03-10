@@ -17,7 +17,7 @@
 
 use std::io::Cursor;
 
-use rand::distributions::*;
+use rand::distr::*;
 use rand::prelude::*;
 use rand_distr::uniform::SampleUniform;
 use rand_xoshiro::Xoshiro256PlusPlus;
@@ -25,8 +25,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 
 use murmur3::murmur3_32;
-
-use wyhash::WyRng;
+use rand_chacha::ChaCha12Rng;
 
 use num::Float;
 
@@ -152,12 +151,14 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
     /// **In this case the function [end_sketch](OptDensMinHash::end_sketch) must be called before calling methods get_hsketch!!**
     pub fn sketch(&mut self, to_sketch: &D) {
         let m = self.hsketch.len();
-        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
+        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>()).unwrap();
         // hash! even if with NoHashHasher. In this case T must be u64 or u32
         let hval1: u64 = self.b_hasher.hash_one(&to_sketch);
         let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
         let r: F = unit_range.sample(&mut rand_generator);
-        let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
+        let k: usize = Uniform::<usize>::new(0, m)
+            .unwrap()
+            .sample(&mut rand_generator); // m beccause upper bound of range is excluded
         if r <= self.hsketch[k] {
             self.hsketch[k] = r;
             self.values[k] = hval1;
@@ -186,11 +187,11 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
         // now we run densification
         let m: usize = self.hsketch.len();
         let mut nbpass = 1u64;
-        let inrange = Uniform::<usize>::new(0, m);
+        let inrange = Uniform::<usize>::new(0, m).unwrap();
         for k in 0..m {
             if !self.init[k] {
                 // change hash function for each, item. rng has no loop at expected horizon and provides independance so we get universal hash function
-                let mut rng2 = WyRng::seed_from_u64(k as u64 + 123743);
+                let mut rng2 = ChaCha12Rng::seed_from_u64(k as u64 + 123743);
                 loop {
                     // we search a non empty bin to fill slot k
                     let j: usize = inrange.sample(&mut rng2);
@@ -314,11 +315,12 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
     pub fn sketch(&mut self, d: &D) {
         //
         let m: usize = self.hsketch.len();
+        let unif_0m = Uniform::<usize>::new(0, m).unwrap();
         let hval1: u64 = self.b_hasher.hash_one(&d);
         let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval1);
-        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>());
+        let unit_range = Uniform::<F>::new(num::zero::<F>(), num::one::<F>()).unwrap();
         let r: F = unit_range.sample(&mut rand_generator);
-        let k: usize = Uniform::<usize>::new(0, m).sample(&mut rand_generator); // m beccause upper bound of range is excluded
+        let k: usize = unif_0m.sample(&mut rand_generator); // m beccause upper bound of range is excluded
         if r <= self.hsketch[k] {
             self.hsketch[k] = r;
             self.values[k] = hval1;
@@ -357,12 +359,14 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
     fn densify(&mut self) -> anyhow::Result<()> {
         // now we run densification
         let m: usize = self.hsketch.len();
+        let unif_m = Uniform::<usize>::new(0, m).unwrap();
         let mut pass: u64 = 1;
         while self.nb_empty > 0 {
             for k in 0..m {
                 if self.init[k] {
-                    let mut rng2 = WyRng::seed_from_u64((k as u64 + 1) * m as u64 + pass + 253713);
-                    let j: usize = Uniform::<usize>::new(0, m).sample(&mut rng2);
+                    let mut rng2 =
+                        ChaCha12Rng::seed_from_u64((k as u64 + 1) * m as u64 + pass + 253713);
+                    let j: usize = unif_m.sample(&mut rng2);
                     if !self.init[j] {
                         self.values[j] = self.values[k];
                         self.hsketch[j] = self.hsketch[k];

@@ -16,7 +16,7 @@ use std::fmt::Debug;
 
 use num;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -86,7 +86,7 @@ where
         assert!(weight > 0.);
         trace!("hash_item : id {:?}  weight {} ", id, weight);
         let winv = 1. / weight;
-        let unif0m = Uniform::<usize>::new(0, self.m);
+        let unif0m = Uniform::<usize>::new(0, self.m).unwrap();
         let id_hash: u64 = self.b_hasher.hash_one(&id);
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(id_hash);
         let mut h = winv * self.exp01.sample(&mut rng);
@@ -218,7 +218,7 @@ where
         F: num::ToPrimitive + std::fmt::Display,
     {
         //
-        let unif0m = Uniform::<usize>::new(0, self.m);
+        let unif0m = Uniform::<usize>::new(0, self.m).unwrap();
         let mut qmax: f64 = self.maxvaluetracker.get_max_value();
 
         let iter = data.iter();
@@ -296,7 +296,7 @@ where
         F: num::ToPrimitive + std::fmt::Display,
     {
         //
-        let unif0m = Uniform::<usize>::new(0, self.m);
+        let unif0m = Uniform::<usize>::new(0, self.m).unwrap();
         let mut qmax: f64 = self.maxvaluetracker.get_max_value();
         let iter = data.iter();
 

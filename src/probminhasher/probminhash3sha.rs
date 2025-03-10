@@ -27,7 +27,7 @@ use std::fmt::Debug;
 
 use num;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use rand::prelude::*;
 use rand_xoshiro::Xoshiro256PlusPlus;
 
@@ -90,7 +90,7 @@ where
         F: num::ToPrimitive + std::fmt::Display,
     {
         //
-        let unif0m = Uniform::<usize>::new(0, self.m);
+        let unif0m = Uniform::<usize>::new(0, self.m).unwrap();
         let mut qmax: f64 = self.maxvaluetracker.get_max_value();
 
         let iter = data.iter();
@@ -176,7 +176,7 @@ where
         F: num::ToPrimitive + std::fmt::Display,
     {
         //
-        let unif0m = Uniform::<usize>::new(0, self.m);
+        let unif0m = Uniform::<usize>::new(0, self.m).unwrap();
         let mut qmax: f64 = self.maxvaluetracker.get_max_value();
         let iter = data.iter();
 
@@ -282,7 +282,7 @@ mod tests {
     fn generate_slices(nb_slices: usize, length: usize) -> Vec<Vec<u8>> {
         //
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(237);
-        let unif = Uniform::<u8>::new_inclusive(0, 255);
+        let unif = Uniform::<u8>::new_inclusive(0, 255).unwrap();
         let mut slices = Vec::<Vec<u8>>::with_capacity(nb_slices);
         for _ in 0..nb_slices {
             let mut slice = Vec::<u8>::with_capacity(length);
