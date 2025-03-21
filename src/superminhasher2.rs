@@ -213,6 +213,7 @@ where
         // we have one random generator for each element to sketch
         // In probminhash we imposed T to verifiy Into<usize>. We have to be coherent..
         let mut rand_generator = Xoshiro256PlusPlus::seed_from_u64(hval_64);
+        let distr_unif = Uniform::new(0u64, usize::MAX as u64).unwrap();
         self.permut_generator.reset();
         //
         log::trace!("item-rank : {}", self.item_rank);
@@ -220,7 +221,7 @@ where
         //
         let mut j: usize = 0;
         while j <= self.a_upper {
-            let r: usize = rand_generator.sample::<u64, StandardUniform>(StandardUniform) as usize;
+            let r = distr_unif.sample(&mut rand_generator) as usize;
             let k = self.permut_generator.next(&mut rand_generator);
             //
             log::trace!(
