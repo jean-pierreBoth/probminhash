@@ -46,10 +46,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 
 rayon = { version = "1.10" }
-# argmin = { version = "0.10" }
-argmin = { git = "https://github.com/jean-pierreBoth/argmin.git" }
-# argmin-observer-slog = { version = "0.1.0"}
-argmin-observer-slog = { git = "https://github.com/jean-pierreBoth/argmin.git" }
+argmin = { version = "0.10" }
+argmin-observer-slog = { version = "0.1.0"}
 
 anyhow = { version = "1.0" }
 # for doc
