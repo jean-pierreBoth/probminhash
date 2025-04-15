@@ -30,10 +30,12 @@ use num::{Bounded, FromPrimitive, Integer, ToPrimitive};
 
 use rayon::prelude::*;
 
-use argmin::core::observers::ObserverMode;
 use argmin::core::{CostFunction, Executor};
 use argmin::solver::goldensectionsearch::GoldenSectionSearch;
+#[cfg(feature = "slog")]
 use argmin_observer_slog::SlogLogger;
+#[cfg(feature = "slog")]
+use argmin::core::observers::ObserverMode;
 
 use anyhow::anyhow;
 
@@ -611,11 +613,13 @@ impl MleJaccard {
         //
         let cost = MleCost::new(dplus as f64, dless as f64, dequal as f64, u, v, self.b);
 
-        let res = Executor::new(cost, solver)
-            .configure(|state| state.param(init_param).max_iters(100))
-            .add_observer(SlogLogger::term(), ObserverMode::Always)
-            .run()
-            .unwrap();
+        let exec = Executor::new(cost, solver)
+            .configure(|state| state.param(init_param).max_iters(100));
+
+        #[cfg(feature = "slog")]
+        let exec = exec.add_observer(SlogLogger::term(), ObserverMode::Always);
+
+        let res = exec.run().unwrap();
 
         log::info!("res : {:#}", res);
 

@@ -47,7 +47,7 @@ serde_json = { version = "1.0" }
 
 rayon = { version = "1.10" }
 argmin = { version = "0.10" }
-argmin-observer-slog = { version = "0.1.0"}
+argmin-observer-slog = { version = "0.1.0", optional = true}
 
 anyhow = { version = "1.0" }
 # for doc
@@ -63,7 +63,8 @@ env_logger = { version = "0.11" }
 
 [features]
 
-default = ["sminhash2"]
+default = ["sminhash2", "slog"]
+slog = ["dep:argmin-observer-slog"]
 
 # to enable the interger version of superminhash
 sminhash2 = []
