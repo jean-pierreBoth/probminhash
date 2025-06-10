@@ -87,7 +87,6 @@ impl Hasher for NoHashHasher {
 /// The signature is a Vec\<F\> where F is f32 or f64
 ///
 /// It runs in one pass on data so it can be used in streaming
-
 pub struct SuperMinHash<F: Float, T: Hash, H: Hasher + Default> {
     /// size of sketch. sketch values lives in  [0, number of sketches], so a u16 is sufficient
     hsketch: Vec<F>,
@@ -122,7 +121,7 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
         // If we initialize by f64::MAX we got a bug beccause f64::MAX as usize is 0! in cmp::min(skect, m-1) in j_2 line 216
         // computation in sketch_batch.
         let large: F = F::from(u32::MAX).unwrap(); // is OK even for f32
-                                                   // ensure validity of inequality of line 215.
+        // ensure validity of inequality of line 215.
         assert!(size < large.to_usize().unwrap());
         for _i in 0..size {
             sketch_init.push(large);
@@ -204,7 +203,7 @@ impl<F: Float + SampleUniform + std::fmt::Debug, T: Hash, H: Hasher + Default>
             let k = Uniform::<usize>::new(j, m)
                 .unwrap()
                 .sample(&mut rand_generator); // m beccause upper bound of range is excluded
-                                              //
+            //
             if self.q[j] != irank {
                 self.q[j] = irank;
                 self.p[j] = j;

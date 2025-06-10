@@ -2,7 +2,7 @@
 //! <https://arxiv.org/abs/1911.00675>
 //! * ProbminHash3a is the fastest but at the cost of some internal storage.
 //! * Probminhash3 is the same algorithm without the time optimization requiring more storage.  
-//!     It can be used in streaming
+//!   It can be used in streaming
 //!
 //! The generic type D must satisfy D:Copy+Eq+Hash+Debug  
 //! The algorithms requires random generators to be initialized by the objects so we need to map (at least approximately
@@ -252,11 +252,11 @@ where
                 }
             } // end if h < qmax
         } // end initial loop
-          //
-          // now we have second step
-          //
+        //
+        // now we have second step
+        //
         let mut i = 2; // by comparison to ProbMinHash3 we are not at i = 2 !!
-                       //
+        //
         while !self.to_be_processed.is_empty() {
             let mut insert_pos = 0;
             trace!(
@@ -330,11 +330,11 @@ where
                 }
             } // end if h < qmax
         } // end initial loop
-          //
-          // now we have second step
-          //
+        //
+        // now we have second step
+        //
         let mut i = 2; // by comparison to ProbMinHash3 we are not at i = 2 !!
-                       //
+        //
         while !self.to_be_processed.is_empty() {
             let mut insert_pos = 0;
             trace!(

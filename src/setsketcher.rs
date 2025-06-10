@@ -30,12 +30,12 @@ use num::{Bounded, FromPrimitive, Integer, ToPrimitive};
 
 use rayon::prelude::*;
 
+#[cfg(feature = "slog")]
+use argmin::core::observers::ObserverMode;
 use argmin::core::{CostFunction, Executor};
 use argmin::solver::goldensectionsearch::GoldenSectionSearch;
 #[cfg(feature = "slog")]
 use argmin_observer_slog::SlogLogger;
-#[cfg(feature = "slog")]
-use argmin::core::observers::ObserverMode;
 
 use anyhow::anyhow;
 
@@ -45,11 +45,11 @@ use crate::fyshuffle::*;
 /// Parameters defining the Sketcher
 /// - choice of a : given $\epsilon$ a is chosen verifying  $$ a \ge  \frac{1}{\epsilon} * log(\frac{m}{b})  $$ so that the probability
 ///   of any sketch value being  negative is less than $\epsilon$
-/// *(lemma 4 of setsketch paper)*.  
+///   *(lemma 4 of setsketch paper)*.  
 ///
 ///
 /// - choice of q:  if $$ q >=  log_{b} (\frac{m  n  a}{\epsilon})$$ then a sketch value is less than q+1 with proba less than $\epsilon$ up to n data to sketch.
-///  *(see lemma 5 of paper)*.  
+///   *(see lemma 5 of paper)*.  
 ///
 /// The default initialization corresponds to $m = 4096, b = 1.001,  a = 20 , q = 2^{16} -2 = 65534$ and guarantees the absence of negative value in sketch with proba $8.28 \space 10^{-6}$ and probability of
 /// sketch value greater than q+1 with probability less than $2.93 \space 10^{-6}$.  
@@ -264,7 +264,7 @@ where
         //
         let k_vec: Vec<I> = (0..params.get_m()).map(|_| I::zero()).collect();
         let lnb = (params.get_b() - 1.).ln_1p(); // this is ln(b) for b near 1.
-                                                 //
+        //
         SetSketcher::<I, T, H> {
             _b: params.get_b(),
             m: params.get_m(),
@@ -293,7 +293,7 @@ where
         let hval1: u64 = self.b_hasher.hash_one(&to_sketch);
         //
         let imax: u64 = I::max_value().to_u64().unwrap(); // max value of I as a u64
-                                                          //
+        //
         let mut rng = Xoshiro256PlusPlus::seed_from_u64(hval1);
         self.permut_generator.reset();
         //
@@ -307,7 +307,7 @@ where
             x_pred = x_j;
             //
             let lb_xj = x_j.ln() / self.lnb; // log base b of x_j
-                                             //
+            //
             if lb_xj > -self.lower_k {
                 break;
             }
@@ -613,8 +613,8 @@ impl MleJaccard {
         //
         let cost = MleCost::new(dplus as f64, dless as f64, dequal as f64, u, v, self.b);
 
-        let exec = Executor::new(cost, solver)
-            .configure(|state| state.param(init_param).max_iters(100));
+        let exec =
+            Executor::new(cost, solver).configure(|state| state.param(init_param).max_iters(100));
 
         #[cfg(feature = "slog")]
         let exec = exec.add_observer(SlogLogger::term(), ObserverMode::Always);

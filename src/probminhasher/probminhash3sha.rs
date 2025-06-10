@@ -105,7 +105,7 @@ where
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = Sha512_256::new();
             // write input message
-            hasher.update(&key.get_sig());
+            hasher.update(key.get_sig());
             // read hash digest and consume hasher
             let new_hash = hasher.finalize();
             let hashed_slice = new_hash.as_slice();
@@ -132,11 +132,11 @@ where
                 }
             } // end if h < qmax
         } // end initial loop
-          //
-          // now we have second step
-          //
+        //
+        // now we have second step
+        //
         let mut i = 2; // by comparison to ProbMinHash3 we are not at i = 2 !!
-                       //
+        //
         while !self.to_be_processed.is_empty() {
             let mut insert_pos = 0;
             trace!(
@@ -191,7 +191,7 @@ where
             // rebuild a new hasher at each id for reproductibility
             let mut hasher = Sha512_256::new();
             // write input message
-            hasher.update(&key.get_sig());
+            hasher.update(key.get_sig());
             // read hash digest and consume hasher
             let new_hash = hasher.finalize();
             let hashed_slice = new_hash.as_slice();
@@ -218,11 +218,11 @@ where
                 }
             } // end if h < qmax
         } // end initial loop
-          //
-          // now we have second step
-          //
+        //
+        // now we have second step
+        //
         let mut i = 2; // by comparison to ProbMinHash3 we are not at i = 2 !!
-                       //
+        //
         while !self.to_be_processed.is_empty() {
             let mut insert_pos = 0;
             trace!(

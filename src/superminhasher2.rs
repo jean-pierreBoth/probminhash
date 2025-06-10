@@ -88,19 +88,18 @@ impl Hasher for NoHashHasher {
 /// To get a u32 signature, a Hasher into 32 bit value must be used, see (fxhash32or)<https://crates.io/crates/twox-hash> or (xxhash32)<https://crates.io/crates/fxhash>
 ///
 /// It runs in one pass on data so it can be used in streaming
-
 pub struct SuperMinHash2<I: Integer, T: Hash, H: Hasher + Default> {
-    ///
+    //
     hsketch: Vec<I>,
     /// initialization marker
     values: Vec<usize>,
-    ///
+    //
     l: Vec<usize>,
     /// to store the current max of current signature value
     b: Vec<usize>,
     /// rank of item hashed . Necessary for the streaming case if sketch_slice is called several times iteratively
     item_rank: usize,
-    ///
+    //
     a_upper: usize,
     /// random permutation generator
     permut_generator: FYshuffle,
@@ -137,14 +136,14 @@ where
             size_i >= 4,
             "hash values should have at least 4 bytes,so u32 or u64"
         ); // at least u32
-           //
-        let sketch_init: Vec<I> = (0..size).into_iter().map(|_| I::zero()).collect();
+        //
+        let sketch_init: Vec<I> = (0..size).map(|_| I::zero()).collect();
         // we initialize sketches by something large.
         // If we initialize by f64::MAX we got a bug beccause f64::MAX as usize is 0! in cmp::min(skect, m-1) in j_2 line 216
         // computation in sketch_batch.
-        let values: Vec<usize> = (0..size).into_iter().map(|_| usize::MAX).collect();
-        let l: Vec<usize> = (0..size).into_iter().map(|_| size - 1).collect();
-        let mut b: Vec<usize> = (0..size).into_iter().map(|_| 0).collect();
+        let values: Vec<usize> = (0..size).map(|_| usize::MAX).collect();
+        let l: Vec<usize> = (0..size).map(|_| size - 1).collect();
+        let mut b: Vec<usize> = (0..size).map(|_| 0).collect();
         b[size - 1] = size;
         let permut_generator = FYshuffle::new(size);
         //
@@ -181,11 +180,11 @@ where
 
     /// returns a reference to computed sketches
     pub fn get_hsketch(&self) -> &Vec<I> {
-        return &self.hsketch;
+        &self.hsketch
     }
 
     /// returns an estimator of jaccard index between the sketch in this structure and the sketch passed as arg
-    pub fn get_jaccard_index_estimate(&self, other_sketch: &Vec<I>) -> Result<f64, ()> {
+    pub fn get_jaccard_index_estimate(&self, other_sketch: &[I]) -> Result<f64, ()> {
         if other_sketch.len() != self.hsketch.len() {
             return Err(());
         }
@@ -196,7 +195,7 @@ where
                 count += 1;
             }
         }
-        return Ok(count as f64 / other_sketch.len() as f64);
+        Ok(count as f64 / other_sketch.len() as f64)
     } // end of get_jaccard_index_estimate
 
     /// Insert an item in the set to sketch.  
@@ -242,7 +241,7 @@ where
                     self.b[self.l[k]] -= 1;
                     self.b[j] += 1;
                     while self.b[self.a_upper] == 0 {
-                        self.a_upper = self.a_upper - 1;
+                        self.a_upper -= 1;
                     }
                     self.l[k] = j;
                     self.values[k] = r;
@@ -260,7 +259,7 @@ where
         } // end of while on j <= upper
         self.item_rank += 1;
         //
-        return Ok(());
+        Ok(())
     } // end of sketch
 
     /// Arg to_sketch is an array ( a slice) of values to hash.
@@ -276,7 +275,7 @@ where
             self.sketch(val).unwrap();
         }
         //
-        return Ok(());
+        Ok(())
     } // end of sketch_batch
 } // end of impl SuperMinHash2
 
@@ -289,8 +288,8 @@ where
 /// Note that if *jp* is the returned value of this function,  
 /// the distance between siga and sigb, associated to the jaccard index is *1.- jp*
 pub fn compute_superminhash_jaccard<F: PartialEq + num::Zero + std::fmt::Debug>(
-    hsketch: &Vec<F>,
-    other_sketch: &Vec<F>,
+    hsketch: &[F],
+    other_sketch: &[F],
 ) -> Result<f32, ()> {
     if hsketch.len() != other_sketch.len() {
         return Err(());
@@ -302,16 +301,16 @@ pub fn compute_superminhash_jaccard<F: PartialEq + num::Zero + std::fmt::Debug>(
             count += 1;
         }
     }
-    return Ok(count as f32 / other_sketch.len() as f32);
+    Ok(count as f32 / other_sketch.len() as f32)
 } // end of get_jaccard_index_estimate
 
 /// just an alias for backward compatibility
 #[inline]
 pub fn get_jaccard_index_estimate<F: PartialEq + num::Zero + std::fmt::Debug>(
-    hsketch: &Vec<F>,
-    other_sketch: &Vec<F>,
+    hsketch: &[F],
+    other_sketch: &[F],
 ) -> Result<f32, ()> {
-    return compute_superminhash_jaccard::<F>(hsketch, other_sketch);
+    compute_superminhash_jaccard::<F>(hsketch, other_sketch)
 }
 
 //===========================================================================================

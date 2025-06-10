@@ -2,12 +2,12 @@
 //! They provides locally sensitive sketching of unweighted data in one pass.
 //!
 //! - Optimal Densification for Fast and Accurate Minwise Hashing.   
-//! Anshumali Shrivastava
-//! Proceedings of the 34 th International Conference on Machine 2017.
-//! [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html)
+//!   Anshumali Shrivastava
+//!   Proceedings of the 34 th International Conference on Machine 2017.
+//!   [pmlr-2017](https://proceedings.mlr.press/v70/shrivastava17a.html)
 //!
 //! - On densification for MinWise Hashing.  
-//! Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
+//!   Mai, Rao, Kapilevitch, Rossi, Abbasi-Yadkori, Sinha.  [pmlr-2020](http://proceedings.mlr.press/v115/mai20a/mai20a.pdf)
 //!
 //! For both implementation the sketch is Vec on following possible types: u64, u32 or F:Float.
 //! Both algorithms can be used in streaming, see methods [sketch](OptDensMinHash::sketch()) as opposed to method
@@ -118,12 +118,10 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             std::panic!("OptDensMinHash: end_sketch should have been called")
         }
         //
-        let value_32 = self
-            .values
+        self.values
             .iter()
             .map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap())
-            .collect();
-        value_32
+            .collect()
     } // end of get_hsketch_u32
 
     /// sketch the slice
@@ -302,12 +300,10 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             std::panic!("OptDensMinHash: end_sketch should have been called")
         }
         //
-        let value_32 = self
-            .values
+        self.values
             .iter()
             .map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap())
-            .collect();
-        value_32
+            .collect()
     } // end of get_hsketch_u32
 
     /// sketch an item. This provides for computing sketches incrementally.   
@@ -554,21 +550,39 @@ mod tests {
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         let delta = (jac - jexact).abs() / sigma;
-        log::info!(" f64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac, jexact, sigma, delta);
+        log::info!(
+            " f64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac,
+            jexact,
+            sigma,
+            delta
+        );
         //
         // check result with u64 signature
         //
         let jac_u64 = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         let delta = (jac_u64 - jexact).abs() / sigma;
-        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u64, jexact, sigma, delta);
+        log::info!(
+            " u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u64,
+            jexact,
+            sigma,
+            delta
+        );
         //
         // check result with u32 signature
         //
         let jac_u32 = get_jaccard_index_estimate(&ska_u32, &skb_u32).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         let delta = (jac_u32 - jexact).abs() / sigma;
-        log::info!(" u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u32, jexact, sigma, delta);
+        log::info!(
+            " u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u32,
+            jexact,
+            sigma,
+            delta
+        );
         //
         Ok((jac, sigma))
     } // end of test_optdens
@@ -621,14 +635,26 @@ mod tests {
         let jac_u64 = get_jaccard_index_estimate(&ska_u64, &skb_u64).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         let delta = (jac_u64 - jexact).abs() / sigma;
-        log::info!(" u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u64, jexact, sigma, delta);
+        log::info!(
+            " u64 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u64,
+            jexact,
+            sigma,
+            delta
+        );
         //
         // check result with u32 signature
         //
         let jac_u32 = get_jaccard_index_estimate(&ska_u32, &skb_u32).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
         let delta = (jac_u32 - jexact).abs() / sigma;
-        log::info!(" u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}", jac_u32, jexact, sigma, delta);
+        log::info!(
+            " u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u32,
+            jexact,
+            sigma,
+            delta
+        );
         //
         Ok((jac, sigma))
     } // end of test_revoptdens
