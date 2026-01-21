@@ -124,6 +124,25 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             .collect()
     } // end of get_hsketch_u32
 
+    /// returns a u32 signature by taking the **lowest 32 bits** of each stored u64. See b-bit MinHash here: https://dl.acm.org/doi/abs/10.1145/1772690.1772759
+    pub fn get_hsketch_lower32_u32(&self) -> Vec<u32> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        self.values.iter().map(|&v| v as u32).collect()
+    }
+
+    /// returns a u16 signature by taking the **lowest 16 bits** of each stored u64.
+    /// This is analogous to b-bit MinHash, but with b = 16.
+    pub fn get_hsketch_lower16_u16(&self) -> Vec<u16> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        self.values.iter().map(|&v| v as u16).collect()
+    }
+
     /// sketch the slice
     pub fn sketch_slice(&mut self, to_sketch: &[D]) -> anyhow::Result<()> {
         let m: usize = self.hsketch.len();
@@ -306,6 +325,25 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             .collect()
     } // end of get_hsketch_u32
 
+    /// returns a u32 signature by taking the **lowest 32 bits** of each stored u64. See b-bit MinHash here: https://dl.acm.org/doi/abs/10.1145/1772690.1772759
+    pub fn get_hsketch_lower32_u32(&self) -> Vec<u32> {
+        if self.nb_empty > 0 {
+            log::error!("RevOptDensMinHash: end_sketch should have been called");
+            std::panic!("RevOptDensMinHash: end_sketch should have been called")
+        }
+        self.values.iter().map(|&v| v as u32).collect()
+    }
+
+    /// returns a u16 signature by taking the **lowest 16 bits** of each stored u64.
+    /// This is analogous to b-bit MinHash, but with b = 16.
+    pub fn get_hsketch_lower16_u16(&self) -> Vec<u16> {
+        if self.nb_empty > 0 {
+            log::error!("RevOptDensMinHash: end_sketch should have been called");
+            std::panic!("RevOptDensMinHash: end_sketch should have been called")
+        }
+        self.values.iter().map(|&v| v as u16).collect()
+    }
+
     /// sketch an item. This provides for computing sketches incrementally.   
     /// **In this case the function [end_sketch()](RevOptDensMinHash::end_sketch) must be called before calling methods get_hsketch!!**
     pub fn sketch(&mut self, d: &D) {
@@ -449,12 +487,12 @@ mod tests {
         //
         let vamax = 300000;
         let va: Vec<usize> = (0..vamax).collect();
-        let vbmin = 50000;
+        let vbmin = 290000;
         let vbmax = 2 * vamax;
         let vb: Vec<usize> = (vbmin..vbmax).collect();
         let inter = vamax - vbmin;
         let jexact = inter as f64 / vbmax as f64;
-        let size = 50000;
+        let size = 4096;
         //
         let _res = test_optdens(&va, &vb, jexact, size);
     } // end of test_optdens_fewbins_fnv_f64
