@@ -108,10 +108,9 @@ where
             hasher.update(key.get_sig());
             // read hash digest and consume hasher
             let new_hash = hasher.finalize();
-            let hashed_slice = new_hash.as_slice();
-            assert_eq!(hashed_slice.len(), 32);
+            assert_eq!(new_hash.len(), 32);
             let mut seed: [u8; 32] = [0; 32];
-            seed.copy_from_slice(&hashed_slice[..32]);
+            seed.copy_from_slice(&new_hash[..32]);
             let mut rng = Xoshiro256PlusPlus::from_seed(seed);
             let h = winv * self.exp01.sample(&mut rng);
             qmax = self.maxvaluetracker.get_max_value();
@@ -194,10 +193,9 @@ where
             hasher.update(key.get_sig());
             // read hash digest and consume hasher
             let new_hash = hasher.finalize();
-            let hashed_slice = new_hash.as_slice();
-            assert_eq!(hashed_slice.len(), 32);
+            assert_eq!(new_hash.len(), 32);
             let mut seed: [u8; 32] = [0; 32];
-            seed.copy_from_slice(&hashed_slice[..32]);
+            seed.copy_from_slice(&new_hash[..32]);
             let mut rng = Xoshiro256PlusPlus::from_seed(seed);
             let h = winv * self.exp01.sample(&mut rng);
             qmax = self.maxvaluetracker.get_max_value();
