@@ -17,6 +17,7 @@
 
 use std::io::Cursor;
 
+use num::PrimInt;
 use rand::distr::*;
 use rand::prelude::*;
 use rand_distr::uniform::SampleUniform;
@@ -123,6 +124,46 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             .map(|v| murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap())
             .collect()
     } // end of get_hsketch_u32
+
+    /// returns a u16 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
+    pub fn get_hsketch_u16(&self) -> Vec<u16> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        //
+        self.values
+            .iter()
+            .map(|v| (murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap() >> 16) as u16)
+            .collect()
+    } // end of get_hsketch_u16
+
+    /// returns a signature as a vector of unsigned integer Vec<U>. to reduce size from F (32 or 64), U should u32,16, or u8.
+    /// generic version of 2 previous method.
+    pub fn get_hsketch_u<U: PrimInt + num::Unsigned>(&self) -> Vec<U> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        let bitsize = U::zero().count_zeros();
+        if bitsize > 32 {
+            return self
+                .values
+                .iter()
+                .map(|v| U::from(*v).unwrap())
+                .collect::<Vec<U>>();
+        } else {
+            let shift = 32 - bitsize;
+            return self
+                .values
+                .iter()
+                .map(|v| {
+                    U::from(murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap() >> shift)
+                        .unwrap()
+                })
+                .collect::<Vec<U>>();
+        }
+    }
 
     /// sketch the slice
     pub fn sketch_slice(&mut self, to_sketch: &[D]) -> anyhow::Result<()> {
@@ -306,6 +347,46 @@ impl<F: Float + SampleUniform + std::fmt::Debug, D: Hash + Copy, H: Hasher + Def
             .collect()
     } // end of get_hsketch_u32
 
+    /// returns a u16 signature. Under memory constraints, it could be useful to accept a small overhead (rehashing and a rellocation)
+    pub fn get_hsketch_u16(&self) -> Vec<u16> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        //
+        self.values
+            .iter()
+            .map(|v| (murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap() >> 16) as u16)
+            .collect()
+    } // end of get_hsketch_u16
+
+    /// returns a signature as a vector of unsigned integer Vec<U>. to reduce size from F (32 or 64), U should u32,16, or u8
+    /// generic version of 2 previous methods
+    pub fn get_hsketch_u<U: PrimInt + num::Unsigned>(&self) -> Vec<U> {
+        if self.nb_empty > 0 {
+            log::error!("OptDensMinHash: end_sketch should have been called");
+            std::panic!("OptDensMinHash: end_sketch should have been called")
+        }
+        let bitsize = U::zero().count_zeros();
+        if bitsize > 32 {
+            return self
+                .values
+                .iter()
+                .map(|v| U::from(*v).unwrap())
+                .collect::<Vec<U>>();
+        } else {
+            let shift = 32 - bitsize;
+            return self
+                .values
+                .iter()
+                .map(|v| {
+                    U::from(murmur3_32(&mut Cursor::new(v.to_ne_bytes()), 127).unwrap() >> shift)
+                        .unwrap()
+                })
+                .collect::<Vec<U>>();
+        }
+    }
+
     /// sketch an item. This provides for computing sketches incrementally.   
     /// **In this case the function [end_sketch()](RevOptDensMinHash::end_sketch) must be called before calling methods get_hsketch!!**
     pub fn sketch(&mut self, d: &D) {
@@ -476,7 +557,7 @@ mod tests {
         //
         let res = test_revoptdens(&va, &vb, jexact, size).unwrap();
         assert!(res.0 > 0. && (res.0 - jexact).abs() < 3. * res.1);
-    } // end of test_fastdens_intersection_fnv_f64
+    } // end of test_revoptdens_fewbins_fnv_f64
 
     #[test]
     fn test_revoptdens_manybins_fnv_f64() {
@@ -537,6 +618,8 @@ mod tests {
         let ska = sminhash.get_hsketch().clone();
         let ska_u64 = sminhash.get_hsketch_u64().clone();
         let ska_u32 = sminhash.get_hsketch_u32();
+        let ska_u16 = sminhash.get_hsketch_u16();
+        let ska_u8: Vec<u8> = sminhash.get_hsketch_u::<u8>();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -546,6 +629,8 @@ mod tests {
         let skb = sminhash.get_hsketch();
         let skb_u64 = sminhash.get_hsketch_u64();
         let skb_u32 = sminhash.get_hsketch_u32();
+        let skb_u16 = sminhash.get_hsketch_u16();
+        let skb_u8: Vec<u8> = sminhash.get_hsketch_u::<u8>();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
@@ -584,6 +669,32 @@ mod tests {
             delta
         );
         //
+        // check result with u16 signature
+        //
+        let jac_u16 = get_jaccard_index_estimate(&ska_u16, &skb_u16).unwrap();
+        let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
+        let delta = (jac_u16 - jexact).abs() / sigma;
+        log::info!(
+            " u16 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u16,
+            jexact,
+            sigma,
+            delta
+        );
+        //
+        // check result with u8 signature
+        //
+        let jac_u8 = get_jaccard_index_estimate(&ska_u8, &skb_u8).unwrap();
+        let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
+        let delta = (jac_u8 - jexact).abs() / sigma;
+        log::info!(
+            " u8 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u8,
+            jexact,
+            sigma,
+            delta
+        );
+        //
         Ok((jac, sigma))
     } // end of test_optdens
 
@@ -607,6 +718,8 @@ mod tests {
         let ska = sminhash.get_hsketch().clone();
         let ska_u64 = sminhash.get_hsketch_u64().clone();
         let ska_u32 = sminhash.get_hsketch_u32();
+        let ska_u16 = sminhash.get_hsketch_u16();
+        let ska_u8: Vec<u8> = sminhash.get_hsketch_u::<u8>();
         sminhash.reinit();
         let resb = sminhash.sketch_slice(&vb);
         if !resb.is_ok() {
@@ -616,6 +729,8 @@ mod tests {
         let skb = sminhash.get_hsketch();
         let skb_u64 = sminhash.get_hsketch_u64();
         let skb_u32 = sminhash.get_hsketch_u32();
+        let skb_u16 = sminhash.get_hsketch_u16();
+        let skb_u8: Vec<u8> = sminhash.get_hsketch_u::<u8>();
         //
         let jac = get_jaccard_index_estimate(&ska, &skb).unwrap();
         let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
@@ -651,6 +766,42 @@ mod tests {
         log::info!(
             " u32 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
             jac_u32,
+            jexact,
+            sigma,
+            delta
+        );
+        //
+        // check result with u16 signature
+        //
+        let jac_u16 = get_jaccard_index_estimate(&ska_u16, &skb_u16).unwrap();
+        let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
+        let delta = (jac_u16 - jexact).abs() / sigma;
+        if delta < 3. {
+            log::info!(
+                " u16 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+                jac_u16,
+                jexact,
+                sigma,
+                delta
+            );
+        } else {
+            log::warn!(
+                " u16 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+                jac_u16,
+                jexact,
+                sigma,
+                delta
+            );
+        }
+        //
+        // check result with u8 signature
+        //
+        let jac_u8 = get_jaccard_index_estimate(&ska_u8, &skb_u8).unwrap();
+        let sigma = (jexact * (1. - jexact) / size as f64).sqrt();
+        let delta = (jac_u8 - jexact).abs() / sigma;
+        log::info!(
+            " u8 sketch jaccard estimate {:.3e}, j exact : {:.3e}, sigma : {:.3e}  j-error/sigma : {:.3e}",
+            jac_u8,
             jexact,
             sigma,
             delta
